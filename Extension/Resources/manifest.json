@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DuoLargo",
-  "description": "Versione diagnostica: misura come Safari dispone le pagine su iPhone Duo.",
-  "version": "0.2.0",
+  "description": "Fa usare alle pagine tutto lo schermo esterno di iPhone Duo, anche sotto i comandi di Safari.",
+  "version": "0.3.0",
   "icons": {
     "48": "icon-48.png",
     "96": "icon-96.png",
@@ -11,13 +11,20 @@
     "512": "icon-512.png"
   },
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "background.js"
+    ],
     "type": "module"
   },
   "content_scripts": [
     {
-      "js": ["content.js"],
-      "matches": ["<all_urls>"],
+      "js": [
+        "largo.js",
+        "diag.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -26,5 +33,8 @@
     "default_popup": "popup.html",
     "default_icon": "toolbar-icon.png"
   },
-  "permissions": ["nativeMessaging", "storage"]
+  "permissions": [
+    "nativeMessaging",
+    "storage"
+  ]
 }

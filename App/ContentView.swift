@@ -11,7 +11,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("DuoLargo")
                             .font(.largeTitle.weight(.bold))
-                        Text("Versione diagnostica 0.2")
+                        Text("Versione 0.3")
                             .foregroundStyle(.secondary)
                     }
 
@@ -21,8 +21,8 @@ struct ContentView: View {
                         step("3", "Ricarica le pagine già aperte.")
                     }
 
-                    section("Raccogli i dati") {
-                        Text("Su ogni pagina compare la pillola “Duo” in alto. Toccala, scegli la situazione (esterno, interno, Split View a sinistra o a destra), tocca Barre di prova e fai uno screenshot, poi Copia dati.")
+                    section("Come si usa") {
+                        Text("A iPhone chiuso le pagine si allargano da sole sotto i comandi di Safari. Il pulsante con le frecce nella colonna dei comandi riporta la pagina alla larghezza normale. Dal menu estensioni di Safari scegli il layout, spegni DuoLargo su un sito o attiva la modalità diagnostica.")
                             .fixedSize(horizontal: false, vertical: true)
                     }
 

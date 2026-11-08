@@ -1,4 +1,4 @@
-// DuoLargo — content script diagnostico (fase 1).
+// DuoLargo — pannello diagnostico (attivo solo in modalità diagnostica).
 // Non allarga ancora niente: misura come Safari dispone la pagina
 // nelle quattro situazioni (esterno, interno, Split View sx/dx).
 
@@ -359,13 +359,21 @@
 
   // ---------- avvio ----------
 
-  api.storage.local.get({ diagEnabled: true }).then((v) => {
-    state.enabled = v.diagEnabled;
+  // Il pannello compare solo in modalità diagnostica (scelta dal popup).
+  state.enabled = false;
+  api.storage.local.get({ mode: "largo" }).then((v) => {
+    state.enabled = v.mode === "diag";
     render();
   });
   api.storage.onChanged.addListener((changes) => {
-    if (changes.diagEnabled) {
-      state.enabled = changes.diagEnabled.newValue;
+    if (changes.mode) {
+      state.enabled = changes.mode.newValue === "diag";
+      if (!state.enabled) {
+        state.cover = false;
+        state.widen = 0;
+        applyViewport();
+        setAbsBars(false);
+      }
       render();
     }
   });
