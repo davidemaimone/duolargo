@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "DuoLargo",
   "description": "Versione diagnostica: misura come Safari dispone le pagine su iPhone Duo.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "icons": {
     "48": "icon-48.png",
     "96": "icon-96.png",

@@ -25,9 +25,12 @@
     native: null,
     touch: null,
     cover: false,
+    widen: 0, // 0 = spento, 1 = width=W + initial-scale=1, 2 = solo width=W
     originalViewport: undefined, // undefined = non toccato, null = non c'era
     bars: false,
+    absBars: false,
   };
+  const WIDEN_LABEL = ["Allarga: no", "Allarga: W+scala 1", "Allarga: solo W"];
 
   // ---------- misure ----------
 
@@ -90,7 +93,9 @@
         : `window.orientation ${window.orientation}`,
       mqPortrait: matchMedia("(orientation: portrait)").matches,
       safeArea: `sx ${sa.left} · dx ${sa.right} · su ${sa.top} · giù ${sa.bottom}`,
+      striscia: `${outerWidth - innerWidth} pt (outer − inner)`,
       coverAttivo: state.cover,
+      allarga: state.widen ? `modo ${state.widen} · W ${outerWidth}` : "no",
       metaViewport: meta ? meta.content : "(assente)",
       posture: navigator.devicePosture?.type ?? "n/d",
       segmenti: readSegments(),
@@ -103,25 +108,69 @@
 
   // ---------- esperimenti ----------
 
-  function setCover(on) {
+  function applyViewport() {
     let meta = document.querySelector('meta[name="viewport"]');
-    if (on) {
-      if (state.originalViewport === undefined) state.originalViewport = meta ? meta.content : null;
-      if (!meta) {
-        meta = document.createElement("meta");
-        meta.name = "viewport";
-        meta.content = "width=device-width, initial-scale=1";
-        document.head.appendChild(meta);
-      }
-      if (!/viewport-fit\s*=/.test(meta.content)) meta.content += ", viewport-fit=cover";
-      else meta.content = meta.content.replace(/viewport-fit\s*=\s*\w+/, "viewport-fit=cover");
-    } else if (state.originalViewport !== undefined) {
-      if (state.originalViewport === null) meta?.remove();
-      else if (meta) meta.content = state.originalViewport;
-      state.originalViewport = undefined;
+    const touched = state.cover || state.widen;
+    if (touched && state.originalViewport === undefined) {
+      state.originalViewport = meta ? meta.content : null;
     }
-    state.cover = on;
+    if (!touched) {
+      if (state.originalViewport !== undefined) {
+        if (state.originalViewport === null) meta?.remove();
+        else if (meta) meta.content = state.originalViewport;
+        state.originalViewport = undefined;
+      }
+      setTimeout(render, 350);
+      return;
+    }
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "viewport";
+      document.head.appendChild(meta);
+    }
+    let parts = (state.originalViewport ?? "width=device-width, initial-scale=1")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .filter((x) => !/^viewport-fit\s*=/.test(x));
+    if (state.widen) {
+      const W = outerWidth;
+      parts = parts.filter((x) => !/^(width|initial-scale)\s*=/.test(x));
+      parts.unshift(`width=${W}`);
+      if (state.widen === 1) parts.splice(1, 0, "initial-scale=1");
+    }
+    if (state.cover) parts.push("viewport-fit=cover");
+    meta.content = parts.join(", ");
     setTimeout(render, 350);
+  }
+
+  // Barre "assolute": elementi normali della pagina (non fissi) posti appena fuori
+  // dai bordi. Se Safari disegna la pagina sotto la sua colonna, queste si vedono.
+  let absEls = [];
+  function setAbsBars(on) {
+    absEls.forEach((el) => el.remove());
+    absEls = [];
+    if (on) {
+      const top = Math.round(scrollY + innerHeight * 0.3);
+      const h = Math.round(innerHeight * 0.4);
+      const right = document.documentElement.clientWidth;
+      const mk = (left, color1, color2, text) => {
+        const el = document.createElement("div");
+        el.textContent = text;
+        el.style.cssText =
+          `all:initial!important;position:absolute!important;z-index:2147483646!important;` +
+          `top:${top}px!important;left:${left}px!important;width:84px!important;height:${h}px!important;` +
+          `background:repeating-linear-gradient(-45deg,${color1} 0 10px,${color2} 10px 20px)!important;` +
+          `color:#fff!important;font:700 14px -apple-system,sans-serif!important;writing-mode:vertical-rl!important;` +
+          `display:flex!important;align-items:center!important;justify-content:center!important;pointer-events:none!important;`;
+        document.documentElement.appendChild(el);
+        absEls.push(el);
+      };
+      mk(right, "#e0a400", "#7a5900", "ASSOLUTA DX");
+      mk(-84, "#9b3de0", "#4e1a75", "ASSOLUTA SX");
+    }
+    state.absBars = on;
+    setTimeout(render, 100);
   }
 
   // ---------- interfaccia (Shadow DOM, isolata dal CSS del sito) ----------
@@ -185,11 +234,14 @@
       <select class="situazione"></select>
       <div class="row">
         <button type="button" data-act="bars" aria-pressed="false">Barre di prova</button>
+        <button type="button" data-act="abs" aria-pressed="false">Barre assolute</button>
         <button type="button" data-act="cover" aria-pressed="false">Prova cover</button>
+        <button type="button" data-act="widen" aria-pressed="false">Allarga: no</button>
         <button type="button" data-act="copy">Copia dati</button>
         <button type="button" data-act="close">Chiudi</button>
       </div>
       <table><tbody class="data"></tbody></table>
+      <p class="note">Barre assolute: gialla a destra e viola a sinistra, sono parte della pagina invece che fisse sullo schermo. Allarga cambia la larghezza della pagina: tocca più volte per passare tra i due modi.</p>
       <p class="note">Le barre rosse e blu sono disegnate fuori dalla pagina, a sinistra e a destra. Se in uno screenshot le vedi sotto i comandi di Safari, Safari disegna anche lì. Le linee verdi segnano i bordi della pagina.</p>
     </div>
   `;
@@ -227,6 +279,10 @@
     }
     root.querySelector('[data-act="bars"]').setAttribute("aria-pressed", String(state.bars));
     root.querySelector('[data-act="cover"]').setAttribute("aria-pressed", String(state.cover));
+    root.querySelector('[data-act="abs"]').setAttribute("aria-pressed", String(state.absBars));
+    const wb = root.querySelector('[data-act="widen"]');
+    wb.setAttribute("aria-pressed", String(state.widen > 0));
+    wb.textContent = WIDEN_LABEL[state.widen];
   }
 
   let scheduled = false;
@@ -255,7 +311,15 @@
     const act = btn.dataset.act;
     if (act === "close") state.open = false;
     if (act === "bars") state.bars = !state.bars;
-    if (act === "cover") setCover(!state.cover);
+    if (act === "cover") {
+      state.cover = !state.cover;
+      applyViewport();
+    }
+    if (act === "widen") {
+      state.widen = (state.widen + 1) % 3;
+      applyViewport();
+    }
+    if (act === "abs") setAbsBars(!state.absBars);
     if (act === "copy") {
       const text = JSON.stringify(collect(), null, 1);
       try {

@@ -11,7 +11,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("DuoLargo")
                             .font(.largeTitle.weight(.bold))
-                        Text("Versione diagnostica 0.1")
+                        Text("Versione diagnostica 0.2")
                             .foregroundStyle(.secondary)
                     }
 
