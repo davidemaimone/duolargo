@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #1c4a8c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #3a3a3c; --accent: #78aaeb; }
+    }
+    body { margin: 0; padding: 16px; min-width: 260px; background: var(--bg); color: var(--fg);
+           font: 15px/1.4 -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 17px; margin: 0 0 12px; }
+    label { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 10px 0; border-bottom: 1px solid var(--line); }
+    input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+    dl { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>DuoLargo diagnostica</h1>
+  <label>Mostra la pillola “Duo” sulle pagine <input type="checkbox" id="enabled"></label>
+  <dl>
+    <dt>Modello</dt><dd id="machine">…</dd>
+    <dt>Sistema</dt><dd id="os">…</dd>
+  </dl>
+  <script src="popup.js"></script>
+</body>
+</html>

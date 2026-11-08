@@ -1,0 +1,89 @@
+name: Compila IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Prefisso bundle ID dal nome utente GitHub
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+          echo "BUNDLE_PREFIX=io.github.${OWNER}" >> "$GITHUB_ENV"
+
+      - name: Installa XcodeGen
+        run: brew install xcodegen
+
+      - name: Genera il progetto Xcode
+        run: |
+          xcodebuild -version | tee versions.txt
+          if ! xcodegen generate > xcodegen.log 2>&1; then
+            cat xcodegen.log
+            ci/annotate.sh error "XcodeGen fallito" xcodegen.log
+            exit 1
+          fi
+          cat xcodegen.log
+
+      - name: Compila (senza firma)
+        run: |
+          set +e
+          xcodebuild \
+            -project DuoLargo.xcodeproj \
+            -scheme DuoLargo \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1
+          STATUS=$?
+          set -e
+          grep -E "error:|warning: |BUILD (SUCCEEDED|FAILED)" build.log | head -200 || true
+          if [ $STATUS -ne 0 ] || [ ! -d build/Build/Products/Release-iphoneos/DuoLargo.app ]; then
+            grep -E "error|Error|failed" build.log | sort -u | head -80 > errors.txt || true
+            tail -60 build.log > tail.txt
+            ci/annotate.sh error "Errori di compilazione" errors.txt
+            ci/annotate.sh warning "Fine del log" tail.txt
+            exit 1
+          fi
+
+      - name: Verifica che l'estensione sia dentro l'app
+        run: |
+          APP=build/Build/Products/Release-iphoneos/DuoLargo.app
+          { ls -la "$APP"; ls -la "$APP/PlugIns"; ls -la "$APP/PlugIns/DuoLargoExtension.appex"; \
+            plutil -p "$APP/Info.plist"; plutil -p "$APP/PlugIns/DuoLargoExtension.appex/Info.plist"; } > bundle.txt 2>&1
+          cat bundle.txt
+          ci/annotate.sh notice "Contenuto del bundle" bundle.txt
+          test -f "$APP/PlugIns/DuoLargoExtension.appex/manifest.json"
+
+      - name: Crea l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/DuoLargo.app Payload/
+          zip -qry DuoLargo.ipa Payload
+          ls -la DuoLargo.ipa
+
+      - name: Pubblica l'IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: DuoLargo-ipa
+          path: DuoLargo.ipa
+          retention-days: 14
+
+      - name: Log di compilazione (se fallisce)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            xcodegen.log
