@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: xcode-27
@@ -78,6 +81,16 @@ jobs:
           name: DuoLargo-ipa
           path: DuoLargo.ipa
           retention-days: 14
+
+      - name: Aggiorna la release con il link diretto all'IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest DuoLargo.ipa \
+            --title "DuoLargo (ultima build)" \
+            --notes "Build ${GITHUB_SHA::7}. Scarica DuoLargo.ipa e installalo con Sideloadly." \
+            --latest
 
       - name: Log di compilazione (se fallisce)
         if: failure()
