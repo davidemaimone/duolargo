@@ -150,7 +150,8 @@ for (const f of fixtures) {
           const r = el.getBoundingClientRect();
           if (r.width && r.height) maxRight = Math.max(maxRight, r.right);
         }
-        return `${document.documentElement.dataset.duolargoState} (contenuto fino a ${Math.round(maxRight)} pt)`;
+        const on = document.getElementById("duolargo-host").shadowRoot.querySelector("button").classList.contains("on");
+        return `${document.documentElement.dataset.duolargoState}, freccia ${on ? "azzurra" : "bianca"} (contenuto fino a ${Math.round(maxRight)} pt)`;
       }, { LIMIT });
     };
     const v1 = await tapAt();
@@ -165,7 +166,11 @@ for (const f of fixtures) {
     await p2.waitForTimeout(700);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await p2.waitForTimeout(200);
-    const menuOpen = await p2.evaluate(() => document.documentElement.dataset.duolargoMenu);
+    const menuOpen = await p2.evaluate(() => {
+      const root = document.getElementById("duolargo-host").shadowRoot;
+      const r = root.querySelector(".menu").getBoundingClientRect();
+      return `${document.documentElement.dataset.duolargoMenu} (menu ${Math.round(r.left)}–${Math.round(r.right)} pt)`;
+    });
     await p2.screenshot({ path: path.join(out, `${name}-menu.png`) });
     const tapOption = async (act) => {
       const c = await p2.evaluate((act) => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.7
+// @version      0.6.8
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -570,7 +570,10 @@ const DUOLARGO_USERSCRIPT = true;
         background: rgba(40,40,43,.84); border-color: rgba(255,255,255,.11);
         box-shadow: inset 0 1px 1px rgba(255,255,255,.14), 0 2px 8px rgba(0,0,0,.3);
       }
-      button.off svg { opacity: .45; }
+      /* stato: freccia azzurra = pagina allargata, bianca = pagina normale */
+      button svg { color: #fff; transition: color .2s; }
+      button.on svg { color: #0a84ff; }
+      button.on:not(.dark) svg { color: #0066e0; }
       button.moving { opacity: 0; transition: none; }
       button[hidden] { display: none; }
       svg { width: 28px; height: 28px; }
@@ -582,7 +585,7 @@ const DUOLARGO_USERSCRIPT = true;
       }
       .toast[hidden] { display: none; }
       .menu {
-        position: absolute; width: 250px; padding: 14px; border-radius: 18px;
+        position: absolute; box-sizing: border-box; width: 250px; padding: 14px; border-radius: 18px;
         background: rgba(28,28,32,.94); color: #f5f5f7;
         -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
         box-shadow: 0 10px 34px rgba(0,0,0,.35);
@@ -712,7 +715,7 @@ const DUOLARGO_USERSCRIPT = true;
     if (zoomed && !menu.hidden) closeMenu();
     document.documentElement.dataset.duolargoZoom = zoomed ? "si" : "no";
     if (!show) return;
-    btn.classList.toggle("off", S.narrow);
+    btn.classList.toggle("on", !S.narrow);
     const vv = window.visualViewport;
     const pageTop = vv ? vv.pageTop : scrollY;
     const reader = canGoForward() ? SAFARI.readerCenterWithForward : SAFARI.readerCenter;
@@ -752,6 +755,7 @@ const DUOLARGO_USERSCRIPT = true;
     btn.classList.remove("moving");
   }
   function onMove() {
+    if (!menu.hidden) closeMenu();
     if (btn.hidden) return;
     btn.classList.add("moving");
     lastMoveAt = performance.now();
@@ -780,9 +784,7 @@ const DUOLARGO_USERSCRIPT = true;
 
   function toggle() {
     if (S.active) {
-      setNarrow(!S.narrow);
-      showToast(S.narrow ? "Pagina normale. Tocca di nuovo per allargarla." :
-        S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
+      setNarrow(!S.narrow); // lo stato si legge dal colore della freccia
     } else {
       evaluate();
       if (!S.active) showToast(`Non posso allargare: ${S.reason}.`);
@@ -810,7 +812,7 @@ const DUOLARGO_USERSCRIPT = true;
     const h = menu.getBoundingClientRect().height || 260;
     const top = Math.max(pageTop + 12, Math.min(pageTop + visH - h - 12, btnTop + 24 - h / 2));
     menu.style.top = `${Math.round(top)}px`;
-    menu.style.left = `${Math.round(S.W - S.strip - 8 - 250)}px`;
+    menu.style.left = `${Math.round(S.W - S.strip - 12 - 250)}px`; // finisce 12 pt prima della colonna
   }
 
   function openMenu() {
@@ -830,7 +832,6 @@ const DUOLARGO_USERSCRIPT = true;
       await api.storage.local.set({ layout: act });
       setLayout(act);
       renderMenu();
-      showToast(act === "protetto" ? "Layout: testo protetto" : "Layout: tutto schermo");
     } else if (act === "site") {
       const set = new Set(S.narrowSites);
       if (set.has(site)) set.delete(site);
