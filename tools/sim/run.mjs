@@ -88,6 +88,12 @@ const CHECK = ({ W, LIMIT }) => {
   return res;
 };
 
+// centro del pulsante, letto dal Shadow DOM (aperto in modalità test)
+const btnCenter = () => {
+  const r = document.getElementById("duolargo-host").shadowRoot.querySelector("button").getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, left: r.left, top: r.top };
+};
+
 const browser = await chromium.launch();
 const results = {};
 for (const f of fixtures) {
@@ -122,10 +128,11 @@ for (const f of fixtures) {
     return host ? true : false;
   });
   let tocchi = "pulsante assente";
+  const pulsante = await p2.evaluate(btnCenter).catch(() => null);
   if (btnBox) {
     const tapAt = async () => {
       // il pulsante è nel Shadow DOM chiuso: lo tocchiamo dove dovrebbe stare
-      const pos = await p2.evaluate(({ W, STRIP }) => ({ x: W - Math.round(STRIP * 0.58 - 22) - 22, y: Math.round(visualViewport.height * 0.6) }), { W, STRIP });
+      const pos = await p2.evaluate(btnCenter);
       await p2.touchscreen.tap(pos.x, pos.y);
       await p2.waitForTimeout(500);
       return p2.evaluate(({ LIMIT }) => {
@@ -153,7 +160,7 @@ for (const f of fixtures) {
 
     // 4) pressione lunga -> menu -> "Tutto schermo" -> "Testo protetto"
     const cdp = await c2.newCDPSession(p2);
-    const pos = await p2.evaluate(({ W, STRIP }) => ({ x: W - Math.round(STRIP * 0.58 - 22) - 22, y: Math.round(visualViewport.height * 0.6) }), { W, STRIP });
+    const pos = await p2.evaluate(btnCenter);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: pos.x, y: pos.y }] });
     await p2.waitForTimeout(700);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
@@ -180,7 +187,7 @@ for (const f of fixtures) {
     tocchi.menu = { aperto: menuOpen, tuttoSchermo: l1, testoProtetto: l2, dopoChiudi: menuClosed };
   }
   await c2.close();
-  results[name] = { ...check, errori: errors, tocchi, sfondo: bg };
+  results[name] = { ...check, errori: errors, tocchi, pulsante, sfondo: bg };
 }
 await browser.close();
 fs.writeFileSync(path.join(out, "risultati.json"), JSON.stringify(results, null, 2));

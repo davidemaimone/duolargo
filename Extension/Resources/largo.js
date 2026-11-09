@@ -538,20 +538,24 @@
   root.innerHTML = `
     <style>
       button {
-        position: absolute; width: 44px; height: 44px; border-radius: 22px; padding: 0;
-        border: 1px solid rgba(255,255,255,.55);
-        background: rgba(150,150,158,.55); color: #fff;
-        -webkit-backdrop-filter: blur(14px) saturate(1.6); backdrop-filter: blur(14px) saturate(1.6);
-        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        position: absolute; width: 48px; height: 48px; border-radius: 24px; padding: 0; margin: 0;
+        border: 0.5px solid rgba(110,110,118,.28);
+        background: rgba(162,162,168,.82); color: #fff;
+        -webkit-backdrop-filter: blur(12px) saturate(1.8); backdrop-filter: blur(12px) saturate(1.8);
+        box-shadow: inset 0 1px 1px rgba(255,255,255,.35), 0 1px 4px rgba(0,0,0,.12);
         display: flex; align-items: center; justify-content: center;
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+        transition: opacity .2s ease-out;
       }
-      button.off { opacity: .6; }
+      button.dark {
+        background: rgba(40,40,43,.84); border-color: rgba(255,255,255,.11);
+        box-shadow: inset 0 1px 1px rgba(255,255,255,.14), 0 2px 8px rgba(0,0,0,.3);
+      }
+      button.off svg { opacity: .45; }
       button.moving { opacity: 0; transition: none; }
-      button { transition: opacity .15s; }
       button[hidden] { display: none; }
-      svg { width: 22px; height: 22px; }
+      svg { width: 28px; height: 28px; }
       .toast {
         position: absolute; transform: translateX(-50%); white-space: normal; width: max-content;
         max-width: 300px; padding: 8px 14px; border-radius: 12px;
@@ -583,8 +587,8 @@
       .menu .row.close { justify-content: center; color: #78aaeb; font-weight: 600; padding-bottom: 2px; }
     </style>
     <button type="button" hidden aria-label="Largo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3.5 12h17M8 7.5l-4.5 4.5 4.5 4.5M16 7.5l4.5 4.5-4.5 4.5"/>
       </svg>
     </button>
     <div class="toast" hidden></div>
@@ -625,6 +629,37 @@
 
   // Con la pagina allargata Safari impagina gli elementi fissi su un'area più alta di quella visibile:
   // per restare fermo rispetto allo schermo il pulsante segue la "finestra visibile" (visualViewport).
+  // Misure dei tasti di Safari sullo schermo esterno (dagli screenshot, in punti):
+  // cerchi da 48, centrati a 48 pt dal bordo destro, un tasto ogni 60 pt (12 pt di spazio).
+  // "Indietro" ha il centro a 198, "Lettore" a 258. Quando c'è anche "Avanti", indietro e avanti
+  // diventano una pillola e "Lettore" scende a 312.
+  const SAFARI = { size: 48, step: 60, readerCenter: 258, readerCenterWithForward: 312, fromRight: 48 };
+
+  function canGoForward() {
+    try { return !!(window.navigation && navigation.canGoForward); } catch { return false; }
+  }
+
+  // Vetro chiaro o scuro come fa Safari: guarda il colore della pagina dietro la colonna.
+  function pageLuminance() {
+    const lum = (el) => {
+      const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+      if (!m) return null;
+      const [r, g, b, a = 1] = m.map(Number);
+      return a < 0.5 ? null : (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    };
+    try {
+      const y = Math.min(innerHeight - 1, Math.max(0, parseFloat(btn.style.top || "0") - scrollY + 24));
+      for (const el of document.elementsFromPoint(Math.min(innerWidth - 2, S.W - S.strip - 2), y)) {
+        if (el === host) continue;
+        for (let e = el; e; e = e.parentElement) {
+          const l = lum(e);
+          if (l !== null) return l;
+        }
+      }
+    } catch {}
+    return lum(document.body) ?? lum(document.documentElement) ?? (matchMedia("(prefers-color-scheme: dark)").matches ? 0 : 1);
+  }
+
   function placeButton() {
     const show = S.mode === "largo" && siteEnabled() && S.active;
     btn.hidden = !show;
@@ -632,10 +667,12 @@
     btn.classList.toggle("off", S.narrow);
     const vv = window.visualViewport;
     const pageTop = vv ? vv.pageTop : scrollY;
-    const visH = vv ? vv.height : innerHeight;
-    btn.style.top = `${Math.round(pageTop + visH * 0.6 - 22)}px`;
-    // centrato sui tasti di Safari (circa il 42% della colonna)
-    btn.style.left = `${Math.round(S.W - (S.strip * 0.58 - 22) - 44)}px`;
+    const reader = canGoForward() ? SAFARI.readerCenterWithForward : SAFARI.readerCenter;
+    const centerY = reader + SAFARI.step;
+    const centerX = S.W - SAFARI.fromRight * (S.strip / 84);
+    btn.style.top = `${Math.round(pageTop + centerY - SAFARI.size / 2)}px`;
+    btn.style.left = `${Math.round(centerX - SAFARI.size / 2)}px`;
+    btn.classList.toggle("dark", pageLuminance() < 0.45);
     document.documentElement.dataset.duolargoState = S.narrow ? "normale" : "larga";
   }
 
@@ -648,15 +685,41 @@
 
   // Mentre la pagina scorre Safari sposta in ritardo gli elementi fissi: il pulsante si dissolve
   // e ricompare al suo posto quando la pagina è ferma. Il tocco continua a funzionare.
-  let moveTimer = 0;
+  // Si aspetta che la pagina sia ferma: nessun evento di scorrimento per un po' E posizione
+  // invariata fra due controlli. Prima il pulsante ricompariva, l'inerzia finale lo rinascondeva
+  // e poi ricompariva di nuovo (il "lampeggio").
+  let settleTimer = 0;
+  let lastMoveAt = 0;
+  let lastTop = null;
+  let fingerDown = false;
+  const currentTop = () => (window.visualViewport ? visualViewport.pageTop : scrollY);
+  function checkSettled() {
+    const top = currentTop();
+    if (fingerDown || performance.now() - lastMoveAt < 180 || top !== lastTop) {
+      lastTop = top;
+      settleTimer = setTimeout(checkSettled, 120);
+      return;
+    }
+    placeButton();
+    btn.classList.remove("moving");
+  }
   function onMove() {
     if (btn.hidden) return;
     btn.classList.add("moving");
-    clearTimeout(moveTimer);
-    moveTimer = setTimeout(() => { placeButton(); btn.classList.remove("moving"); }, 220);
+    lastMoveAt = performance.now();
+    lastTop = currentTop();
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(checkSettled, 200);
   }
   window.addEventListener("scroll", onMove, { passive: true });
-  window.visualViewport?.addEventListener("scroll", () => { onMove(); queuePlace(); }, { passive: true });
+  window.visualViewport?.addEventListener("scroll", onMove, { passive: true });
+  document.addEventListener("touchstart", () => { fingerDown = true; }, { passive: true, capture: true });
+  const fingerUp = () => { fingerDown = false; };
+  document.addEventListener("touchend", fingerUp, { passive: true, capture: true });
+  document.addEventListener("touchcancel", fingerUp, { passive: true, capture: true });
+  // la pillola indietro/avanti di Safari cambia quando si naviga: si ricolloca il pulsante
+  try { window.navigation?.addEventListener("currententrychange", () => setTimeout(placeButton, 50)); } catch {}
+  window.addEventListener("pageshow", () => setTimeout(placeButton, 50));
   window.visualViewport?.addEventListener("resize", queuePlace, { passive: true });
 
   function setNarrow(on) {
@@ -697,7 +760,7 @@
     const visH = vv ? vv.height : innerHeight;
     const btnTop = parseFloat(btn.style.top) || pageTop + visH * 0.6;
     const h = menu.getBoundingClientRect().height || 260;
-    const top = Math.max(pageTop + 12, Math.min(pageTop + visH - h - 12, btnTop + 22 - h / 2));
+    const top = Math.max(pageTop + 12, Math.min(pageTop + visH - h - 12, btnTop + 24 - h / 2));
     menu.style.top = `${Math.round(top)}px`;
     menu.style.left = `${Math.round(S.W - S.strip - 8 - 250)}px`;
   }
