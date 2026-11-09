@@ -19,8 +19,33 @@
   if (window.top !== window) return;
   if (window.__duoLargo) return;
   window.__duoLargo = true;
+  // Estensione e userscript vivono in mondi JS separati: il segno sul DOM evita che girino entrambi.
+  const IS_USERSCRIPT = typeof DUOLARGO_USERSCRIPT !== "undefined";
+  if (document.documentElement.hasAttribute("data-duolargo")) return;
+  document.documentElement.setAttribute("data-duolargo", IS_USERSCRIPT ? "userscript" : "extension");
 
-  const api = globalThis.browser ?? globalThis.chrome;
+  // Nello userscript non ci sono le API delle estensioni: impostazioni in localStorage.
+  function userscriptApi() {
+    const KEY = "duolargo:settings";
+    const read = () => {
+      try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+    };
+    return {
+      storage: {
+        local: {
+          get: (defaults) => Promise.resolve({ ...defaults, ...read() }),
+          set: (values) => {
+            try { localStorage.setItem(KEY, JSON.stringify({ ...read(), ...values })); } catch {}
+            return Promise.resolve();
+          },
+        },
+        onChanged: { addListener() {} },
+      },
+      runtime: { onMessage: { addListener() {} } },
+    };
+  }
+
+  const api = IS_USERSCRIPT ? userscriptApi() : globalThis.browser ?? globalThis.chrome;
   const site = location.hostname.replace(/^www\./, "");
 
   const S = {
@@ -245,6 +270,7 @@
         box-shadow: 0 2px 8px rgba(0,0,0,.18);
         display: flex; align-items: center; justify-content: center;
         -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
       }
       button.off { width: 34px; height: 34px; border-radius: 17px; opacity: .75; }
       button[hidden] { display: none; }
@@ -289,7 +315,27 @@
     }
   }
 
+  // Pressione lunga: alterna "Testo protetto" e "Tutto schermo".
+  let pressTimer = 0;
+  let longPressed = false;
+  btn.addEventListener("touchstart", () => {
+    longPressed = false;
+    pressTimer = setTimeout(async () => {
+      longPressed = true;
+      if (!S.active) return;
+      const layout = S.layout === "protetto" ? "tutto" : "protetto";
+      await api.storage.local.set({ layout });
+      setLayout(layout);
+      showToast(layout === "protetto" ? "Layout: testo protetto" : "Layout: tutto schermo");
+    }, 550);
+  }, { passive: true });
+  const cancelPress = () => clearTimeout(pressTimer);
+  btn.addEventListener("touchend", cancelPress, { passive: true });
+  btn.addEventListener("touchmove", cancelPress, { passive: true });
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
+
   btn.addEventListener("click", () => {
+    if (longPressed) { longPressed = false; return; }
     if (S.active) {
       S.tempOff = true;
       deactivate();
@@ -362,6 +408,15 @@
   window.visualViewport?.addEventListener("resize", updateLock, { passive: true });
   window.addEventListener("load", () => scheduleProtect(300));
 
+  function setLayout(layout) {
+    if (S.layout === layout) return;
+    S.layout = layout;
+    if (S.active) {
+      unprotect();
+      protect();
+    }
+  }
+
   // ---------- popup ----------
 
   api.runtime.onMessage.addListener((msg) => {
@@ -387,13 +442,7 @@
     let reEval = false;
     if (changes.mode) { S.mode = changes.mode.newValue; reEval = true; }
     if (changes.disabledSites) { S.disabledSites = changes.disabledSites.newValue ?? []; reEval = true; }
-    if (changes.layout) {
-      S.layout = changes.layout.newValue;
-      if (S.active) {
-        unprotect();
-        protect();
-      }
-    }
+    if (changes.layout) setLayout(changes.layout.newValue);
     if (reEval) {
       if (S.mode !== "largo" || !siteEnabled()) deactivate();
       S.tempOff = false;
