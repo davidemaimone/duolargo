@@ -127,11 +127,15 @@
 
   const style = document.createElement("style");
   style.id = "duolargo-style";
-  style.textContent = `html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }`;
+  style.textContent = `
+  html.duolargo-on, html.duolargo-on body { overflow-x: clip !important; max-width: 100% !important; }
+  html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }
+`;
 
   function updateLock() {
     const vv = window.visualViewport;
     const zoomed = vv && vv.scale > 1.02;
+    document.documentElement.classList.toggle("duolargo-on", S.active);
     document.documentElement.classList.toggle("duolargo-lock", S.active && !zoomed);
     if (S.active && !zoomed && (scrollX > 0 || (vv && vv.offsetLeft > 0.5))) {
       window.scrollTo(0, scrollY);
@@ -194,15 +198,26 @@
       wants.set(c, Math.max(wants.get(c) ?? 0, overlap));
     }
 
-    // scritture tutte insieme, dopo le letture
-    for (const [c, extra] of wants) {
-      if (!S.padded.has(c)) S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right")]);
-      const cs = getComputedStyle(c);
-      const before = c.getBoundingClientRect().width;
-      c.style.setProperty("padding-right", `${parseFloat(cs.paddingRight) + extra}px`, "important");
-      if (c.getBoundingClientRect().width > before + 1) c.style.setProperty("box-sizing", "border-box", "important");
+    // Ogni contenitore riceve il padding una volta sola, calcolato sul SUO bordo destro:
+    // prima veniva sommato a ogni passata e il testo diventava strettissimo.
+    const plan = [];
+    for (const c of wants.keys()) {
+      if (S.padded.has(c)) continue;
+      let skip = false;
+      for (let a = c.parentElement; a; a = a.parentElement) if (S.padded.has(a) || wants.has(a)) { skip = true; break; }
+      if (skip) continue;
+      const r = c.getBoundingClientRect();
+      const need = Math.ceil(r.right + scrollX - limit);
+      if (need <= 0 || r.width - need < 120) continue;
+      plan.push([c, need, parseFloat(getComputedStyle(c).paddingRight) || 0]);
+    }
+    for (const [c, need, pr] of plan) {
+      S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right")]);
+      c.style.setProperty("box-sizing", "border-box", "important");
+      c.style.setProperty("padding-right", `${pr + need}px`, "important");
     }
     for (const [f, extra] of shifts) {
+      if (S.moved.has(f)) continue;
       const cs = getComputedStyle(f);
       if (!S.moved.has(f)) {
         const prop = cs.right !== "auto" ? "right" : "left";
@@ -212,7 +227,7 @@
       const now = parseFloat(cs[prop]) || 0;
       f.style.setProperty(prop, `${prop === "right" ? now + extra : now - extra}px`, "important");
     }
-    return wants.size + shifts.size;
+    return plan.length + shifts.size;
   }
 
   function protect() {
@@ -272,6 +287,8 @@
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
       }
+      button { transition: opacity .18s; }
+      button.scrolling { opacity: 0; pointer-events: none; transition: none; }
       button.off { width: 34px; height: 34px; border-radius: 17px; opacity: .75; }
       button[hidden] { display: none; }
       svg { width: 22px; height: 22px; }
@@ -309,7 +326,8 @@
     const top = Math.round(innerHeight * 0.6);
     btn.style.top = `${top}px`;
     if (S.active) {
-      btn.style.right = `${Math.round((S.strip - 44) / 2)}px`;
+      // i tasti di Safari sono centrati a circa il 42% della colonna (misurato sullo screenshot)
+      btn.style.right = `${Math.round(S.strip * 0.58 - 22)}px`;
     } else {
       btn.style.right = "6px"; // pagina normale: il pulsante resta dentro la pagina
     }
@@ -401,6 +419,15 @@
     if (!S.active) setTimeout(evaluate, 300);
     placeButton();
   }
+
+  // Durante lo scorrimento Safari fa "ondeggiare" gli elementi fissi: il pulsante sparisce e torna a pagina ferma.
+  let scrollTimer = 0;
+  window.addEventListener("scroll", () => {
+    if (btn.hidden) return;
+    btn.classList.add("scrolling");
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => btn.classList.remove("scrolling"), 280);
+  }, { passive: true });
 
   window.addEventListener("resize", onResize, { passive: true });
   window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
