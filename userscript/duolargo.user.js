@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.5
+// @version      0.6.6
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -653,8 +653,28 @@ const DUOLARGO_USERSCRIPT = true;
   // diventano una pillola e "Lettore" scende a 312.
   const SAFARI = { size: 48, step: 60, readerCenter: 258, readerCenterWithForward: 312, fromRight: 48 };
 
+  // C'è il tasto "Avanti"? Safari non lo dice alle pagine (nel tuo test la Navigation API ha
+  // risposto di no anche con il tasto visibile), quindi si deduce da come si è arrivati qui:
+  // tornando indietro (o con la cache avanti/indietro) di solito esiste una pagina "avanti";
+  // seguendo un link nuovo no. In caso di dubbio meglio un po' di spazio in più che coprire il Lettore.
+  const FWD_KEY = "duolargo:fwd:" + location.href;
+  let fwdHint = false;
+  try {
+    const type = performance.getEntriesByType("navigation")[0]?.type;
+    if (type === "back_forward") fwdHint = true;
+    else if (type === "reload") fwdHint = sessionStorage.getItem(FWD_KEY) === "1";
+  } catch {}
+  function rememberFwd() {
+    try { sessionStorage.setItem(FWD_KEY, fwdHint ? "1" : "0"); } catch {}
+  }
+  rememberFwd();
+  window.addEventListener("pageshow", (e) => { if (e.persisted) { fwdHint = true; rememberFwd(); } });
+  window.addEventListener("popstate", () => { fwdHint = true; rememberFwd(); setTimeout(placeButton, 50); });
+
   function canGoForward() {
-    try { return !!(window.navigation && navigation.canGoForward); } catch { return false; }
+    let api = false;
+    try { api = !!(window.navigation && navigation.canGoForward); } catch {}
+    return api || fwdHint;
   }
 
   // Vetro chiaro o scuro come fa Safari: guarda il colore della pagina dietro la colonna.
