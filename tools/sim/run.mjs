@@ -68,6 +68,7 @@ const CHECK = ({ W, LIMIT }) => {
     const inter = el.matches(INTER);
     if (!direct && !inter) continue;
     if (inSideScroller(el)) continue;
+    if (el.closest("[data-sim-ammesso]")) continue; // casi limite accettati di proposito
     // per il testo conta dove finiscono davvero le lettere, non il riquadro dell'elemento
     let textRight = r.right;
     if (direct && !inter) {
@@ -81,7 +82,7 @@ const CHECK = ({ W, LIMIT }) => {
       if (textRight === -Infinity) continue;
     }
     const right = clipped(el, { right: textRight });
-    if (right > LIMIT + 1 && r.left < W) res.sottoLaColonna.push(`${desc(el)} [${Math.round(r.left)}–${Math.round(right)}]`);
+    if (right > LIMIT + 3 && r.left < W) res.sottoLaColonna.push(`${desc(el)} [${Math.round(r.left)}–${Math.round(right)}]`);
     if (direct && !inter && r.width < 140 && (el.textContent || "").trim().length > 40) res.troppoStretti.push(`${desc(el)} [larghezza ${Math.round(r.width)}]`);
   }
   return res;

@@ -283,13 +283,32 @@
     return right;
   }
 
-  // Contenitore da accorciare: abbastanza largo da non schiacciare il testo e non ancora usato.
-  function pickContainer(el, interactive) {
+  // Contenitore da accorciare e di quanto. Si sale verso l'alto finché si trova un contenitore
+  // che si può accorciare senza schiacciare il testo (contenuto ≥ 160 pt e ≥ 55% di prima).
+  // Mai due margini uno dentro l'altro: se il contenitore o un suo antenato è già stato accorciato
+  // e l'elemento sborda ancora (testo che non va a capo, larghezze fisse, 100vw…) ci si arrende.
+  function planFor(el, interactive, limit) {
     let c = blockContainer(el, !interactive);
-    while (c && c !== document.body && (S.padded.has(c) || c.getBoundingClientRect().width < 180)) {
+    while (c && c !== document.body && c !== document.documentElement) {
+      if (S.padded.has(c)) return null;
+      const cs = getComputedStyle(c);
+      const cr = c.getBoundingClientRect();
+      const pr = parseFloat(cs.paddingRight) || 0;
+      const pl = parseFloat(cs.paddingLeft) || 0;
+      const br = parseFloat(cs.borderRightWidth) || 0;
+      const bl = parseFloat(cs.borderLeftWidth) || 0;
+      const need = Math.ceil(cr.right - br - pr - limit);
+      if (need <= 0) return null; // il contenitore finisce già prima: il problema è altrove
+      const contentNow = cr.width - pl - pr - bl - br;
+      if (contentNow - need >= Math.max(160, contentNow * 0.55)) {
+        for (let a = c.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+          if (S.padded.has(a)) return null;
+        }
+        return { c, value: pr + need };
+      }
       c = blockContainer(c, false);
     }
-    return c;
+    return null;
   }
 
   function protectPass() {
@@ -323,19 +342,18 @@
         clips.set(ca, Math.ceil(ca.getBoundingClientRect().right - limit));
         continue;
       }
-      const c = pickContainer(el, interactive);
-      if (!c || c === document.body || c === document.documentElement) continue;
-      if (pads.has(c)) continue;
-      const cs = getComputedStyle(c);
-      const pr = parseFloat(cs.paddingRight) || 0;
-      const br = parseFloat(cs.borderRightWidth) || 0;
-      const inner = c.getBoundingClientRect().right - br - pr; // bordo destro del contenuto
-      const need = Math.ceil(inner - limit);
-      if (need <= 0) continue;
-      pads.set(c, pr + need);
+      const plan = planFor(el, interactive, limit);
+      if (!plan || pads.has(plan.c)) continue;
+      pads.set(plan.c, plan.value);
     }
 
     // scritture tutte insieme, dopo le letture
+    // un contenitore che ne racchiude un altro dello stesso giro vince: niente margini annidati
+    for (const c of [...pads.keys()]) {
+      for (let a = c.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+        if (pads.has(a)) { pads.delete(c); break; }
+      }
+    }
     for (const [c, value] of pads) {
       S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right"),
                        c.style.getPropertyValue("box-sizing"), c.style.getPropertyPriority("box-sizing")]);
