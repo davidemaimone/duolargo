@@ -113,8 +113,9 @@
     const parts = S.originalViewport
       .split(",")
       .map((x) => x.trim())
-      .filter((x) => x && !/^(width|initial-scale)\s*=/i.test(x));
-    parts.unshift(`width=${S.W}`, "initial-scale=1");
+      .filter((x) => x && !/^(width|initial-scale|minimum-scale|shrink-to-fit)\s*=/i.test(x));
+    // minimum-scale=1 impedisce a Safari di rimpicciolire la pagina per farla stare prima della colonna
+    parts.unshift(`width=${S.W}`, "initial-scale=1", "minimum-scale=1");
     const wanted = parts.join(", ");
     if (meta.content !== wanted) {
       applyingMeta = true;
