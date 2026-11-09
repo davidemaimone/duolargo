@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.4.4
+// @version      0.4.5
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -346,8 +346,6 @@ const DUOLARGO_USERSCRIPT = true;
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
       }
-      button { transition: opacity .18s; }
-      button.scrolling { opacity: 0; pointer-events: none; transition: none; }
       button.off { width: 34px; height: 34px; border-radius: 17px; opacity: .75; }
       button[hidden] { display: none; }
       svg { width: 22px; height: 22px; }
@@ -392,27 +390,7 @@ const DUOLARGO_USERSCRIPT = true;
     }
   }
 
-  // Pressione lunga: alterna "Testo protetto" e "Tutto schermo".
-  let pressTimer = 0;
-  let longPressed = false;
-  btn.addEventListener("touchstart", () => {
-    longPressed = false;
-    pressTimer = setTimeout(async () => {
-      longPressed = true;
-      if (!S.active) return;
-      const layout = S.layout === "protetto" ? "tutto" : "protetto";
-      await api.storage.local.set({ layout });
-      setLayout(layout);
-      showToast(layout === "protetto" ? "Layout: testo protetto" : "Layout: tutto schermo");
-    }, 550);
-  }, { passive: true });
-  const cancelPress = () => clearTimeout(pressTimer);
-  btn.addEventListener("touchend", cancelPress, { passive: true });
-  btn.addEventListener("touchmove", cancelPress, { passive: true });
-  btn.addEventListener("contextmenu", (e) => e.preventDefault());
-
   btn.addEventListener("click", () => {
-    if (longPressed) { longPressed = false; return; }
     if (S.active) {
       S.tempOff = true;
       deactivate();
@@ -479,22 +457,6 @@ const DUOLARGO_USERSCRIPT = true;
     if (!S.active) setTimeout(evaluate, 300);
     placeButton();
   }
-
-  // Durante lo scorrimento Safari fa "ondeggiare" gli elementi fissi: il pulsante sparisce e torna a pagina ferma.
-  let scrollTimer = 0;
-  let touching = false;
-  const hideBtn = () => {
-    if (btn.hidden) return;
-    btn.classList.add("scrolling");
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => { if (!touching) btn.classList.remove("scrolling"); }, 450);
-  };
-  window.addEventListener("scroll", hideBtn, { passive: true });
-  window.addEventListener("touchmove", (e) => { if (!e.composedPath().includes(host)) { touching = true; hideBtn(); } }, { passive: true });
-  window.addEventListener("touchend", () => {
-    // si nasconde solo se il dito stava davvero trascinando la pagina, non dopo un tocco sul pulsante
-    if (touching) { touching = false; hideBtn(); }
-  }, { passive: true });
 
   window.addEventListener("resize", onResize, { passive: true });
   window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
