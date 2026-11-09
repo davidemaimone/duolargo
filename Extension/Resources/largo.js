@@ -342,10 +342,7 @@
   // sotto la colonna. Si riallargano solo se quasi privi di testo.
   function isCarousel(el, cs) {
     const ox = cs.overflowX;
-    if (el.scrollWidth <= el.clientWidth + 2) return false;
-    if (ox === "auto" || ox === "scroll") return true;
-    if (ox === "hidden" || ox === "clip") return (el.textContent || "").trim().length < 40;
-    return false;
+    return (ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 2;
   }
 
   function insideBled(el) {
@@ -369,6 +366,12 @@
         if (!media && !isCarousel(el, cs)) continue;
         // deve arrivare quasi al bordo del contenuto accorciato
         if (r.right < limit - 4) continue;
+        // e non deve uscire da un riquadro intermedio (scheda con sfondo o bordi arrotondati)
+        let boxed = false;
+        for (let a = el.parentElement; a && a !== c; a = a.parentElement) {
+          if (a.getBoundingClientRect().right < limit + need - 1) { boxed = true; break; }
+        }
+        if (boxed) continue;
         targets.push([el, Math.round(limit + need - r.right), r.width]);
         // i discendenti di un elemento riallargato vengono con lui: si salta il sottoalbero
         let next = el;
@@ -381,7 +384,8 @@
       // mai oltre il bordo dello schermo
       const extra = Math.min(extraWanted, Math.floor(S.W - el.getBoundingClientRect().right));
       if (extra <= 0) continue;
-      S.bled.set(el, ["width", "max-width", "margin-right"].map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)]));
+      S.bled.set(el, ["width", "max-width", "margin-right", "box-sizing"].map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)]));
+      el.style.setProperty("box-sizing", "border-box", "important"); // la larghezza include il padding
       el.style.setProperty("max-width", "none", "important");
       el.style.setProperty("width", `${Math.round(width + extra)}px`, "important");
       el.style.setProperty("margin-right", `-${extra}px`, "important");
@@ -459,6 +463,12 @@
     return pads.size + shifts.size + clips.size;
   }
 
+  function pageWiderThanScreen() {
+    if (document.documentElement.scrollWidth > S.W + 1) return true;
+    for (const el of S.bled.keys()) if (el.getBoundingClientRect().right > S.W + 1) return true;
+    return false;
+  }
+
   function unbleed() {
     const put = (el, prop, v, p) => (v ? el.style.setProperty(prop, v, p) : el.style.removeProperty(prop));
     for (const [el, props] of S.bled) for (const [prop, v, p] of props) put(el, prop, v, p);
@@ -470,7 +480,7 @@
     protectInner();
     // la pagina non deve mai diventare più larga dello schermo: Safari sposterebbe gli elementi
     // fissi (il pulsante finirebbe in mezzo alla pagina e non risponderebbe più ai tocchi)
-    if (document.documentElement.scrollWidth > S.W + 1 && S.bled.size) unbleed();
+    if (S.bled.size && pageWiderThanScreen()) unbleed();
   }
 
   function protectInner() {
@@ -518,13 +528,17 @@
   const host = document.createElement("div");
   host.id = "duolargo-host";
   host.style.cssText =
-    "all:initial!important;position:fixed!important;top:0!important;left:0!important;" +
+    // Assoluto rispetto alla pagina, non fisso: quando la pagina è più larga di quanto Safari
+    // si aspetta, Safari disegna gli elementi fissi in un punto diverso da quello che crede
+    // JavaScript (pulsante in mezzo alla pagina e tocchi che vanno a vuoto). Gli elementi
+    // assoluti invece stanno sempre dove li mettiamo.
+    "all:initial!important;position:absolute!important;top:0!important;left:0!important;" +
     "width:0!important;height:0!important;z-index:2147483647!important;";
   const root = host.attachShadow({ mode: window.__DUOLARGO_TEST__ ? "open" : "closed" });
   root.innerHTML = `
     <style>
       button {
-        position: fixed; width: 44px; height: 44px; border-radius: 22px; padding: 0;
+        position: absolute; width: 44px; height: 44px; border-radius: 22px; padding: 0;
         border: 1px solid rgba(255,255,255,.55);
         background: rgba(150,150,158,.55); color: #fff;
         -webkit-backdrop-filter: blur(14px) saturate(1.6); backdrop-filter: blur(14px) saturate(1.6);
@@ -539,14 +553,14 @@
       button[hidden] { display: none; }
       svg { width: 22px; height: 22px; }
       .toast {
-        position: fixed; left: 50%; transform: translateX(-50%); bottom: 90px;
+        position: absolute; transform: translateX(-50%); white-space: normal; width: max-content;
         max-width: 300px; padding: 8px 14px; border-radius: 12px;
         background: rgba(30,30,34,.92); color: #fff; font: 14px/1.3 -apple-system, system-ui, sans-serif;
         text-align: center;
       }
       .toast[hidden] { display: none; }
       .menu {
-        position: fixed; width: 250px; padding: 14px; border-radius: 18px;
+        position: absolute; width: 250px; padding: 14px; border-radius: 18px;
         background: rgba(28,28,32,.94); color: #f5f5f7;
         -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
         box-shadow: 0 10px 34px rgba(0,0,0,.35);
@@ -598,9 +612,16 @@
   function showToast(text) {
     toast.textContent = text;
     toast.hidden = false;
+    const vv = window.visualViewport;
+    const pageTop = vv ? vv.pageTop : scrollY;
+    const visH = vv ? vv.height : innerHeight;
+    const pageLeft = vv ? vv.pageLeft : scrollX;
+    toast.style.top = `${Math.round(pageTop + visH - 150)}px`;
+    toast.style.left = `${Math.round(pageLeft + (S.W - S.strip || innerWidth) / 2)}px`;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => (toast.hidden = true), 2200);
   }
+
 
   // Con la pagina allargata Safari impagina gli elementi fissi su un'area più alta di quella visibile:
   // per restare fermo rispetto allo schermo il pulsante segue la "finestra visibile" (visualViewport).
@@ -610,9 +631,11 @@
     if (!show) return;
     btn.classList.toggle("off", S.narrow);
     const vv = window.visualViewport;
-    const top = vv ? vv.offsetTop + vv.height * 0.6 : innerHeight * 0.6;
-    btn.style.top = `${Math.round(top - 22)}px`;
-    btn.style.right = `${Math.round(S.strip * 0.58 - 22)}px`;
+    const pageTop = vv ? vv.pageTop : scrollY;
+    const visH = vv ? vv.height : innerHeight;
+    btn.style.top = `${Math.round(pageTop + visH * 0.6 - 22)}px`;
+    // centrato sui tasti di Safari (circa il 42% della colonna)
+    btn.style.left = `${Math.round(S.W - (S.strip * 0.58 - 22) - 44)}px`;
     document.documentElement.dataset.duolargoState = S.narrow ? "normale" : "larga";
   }
 
@@ -670,13 +693,13 @@
 
   function placeMenu() {
     const vv = window.visualViewport;
-    const offTop = vv ? vv.offsetTop : 0;
+    const pageTop = vv ? vv.pageTop : scrollY;
     const visH = vv ? vv.height : innerHeight;
-    const b = btn.getBoundingClientRect();
+    const btnTop = parseFloat(btn.style.top) || pageTop + visH * 0.6;
     const h = menu.getBoundingClientRect().height || 260;
-    const top = Math.max(offTop + 12, Math.min(offTop + visH - h - 12, b.top + b.height / 2 - h / 2));
+    const top = Math.max(pageTop + 12, Math.min(pageTop + visH - h - 12, btnTop + 22 - h / 2));
     menu.style.top = `${Math.round(top)}px`;
-    menu.style.right = `${Math.round(S.strip + 8)}px`;
+    menu.style.left = `${Math.round(S.W - S.strip - 8 - 250)}px`;
   }
 
   function openMenu() {
@@ -875,7 +898,7 @@
   // ---------- avvio ----------
 
   (document.head ?? document.documentElement).appendChild(style);
-  (document.body ?? document.documentElement).appendChild(host);
+  document.documentElement.appendChild(host); // fuori dal body: niente contenitori posizionati del sito
 
   api.storage.local.get({ mode: "largo", layout: "protetto", disabledSites: [], narrowSites: [] }).then((v) => {
     S.mode = v.mode;
