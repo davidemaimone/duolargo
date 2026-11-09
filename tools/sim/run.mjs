@@ -124,12 +124,28 @@ for (const f of fixtures) {
   if (btnBox) {
     const tapAt = async () => {
       // il pulsante è nel Shadow DOM chiuso: lo tocchiamo dove dovrebbe stare
-      const pos = await p2.evaluate(({ W, STRIP }) => ({ x: W - Math.round(STRIP * 0.58 - 22) - 22, y: Math.round(innerHeight * 0.6) + 22 }), { W, STRIP });
+      const pos = await p2.evaluate(({ W, STRIP }) => ({ x: W - Math.round(STRIP * 0.58 - 22) - 22, y: Math.round(visualViewport.height * 0.6) }), { W, STRIP });
       await p2.touchscreen.tap(pos.x, pos.y);
-      await p2.waitForTimeout(400);
-      return p2.evaluate(() => document.querySelector('meta[name="viewport"]')?.content);
+      await p2.waitForTimeout(500);
+      return p2.evaluate(({ LIMIT }) => {
+        // in modalità normale il contenuto (non fisso) deve restare entro 382 pt
+        let maxRight = 0;
+        for (const el of document.body.getElementsByTagName("*")) {
+          if (el.id === "duolargo-host") continue;
+          let skip = false;
+          for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+            const c = getComputedStyle(e);
+            if (c.position === "fixed" || (e !== el && c.overflowX !== "visible")) { skip = true; break; }
+          }
+          if (skip) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width && r.height) maxRight = Math.max(maxRight, r.right);
+        }
+        return `${document.documentElement.dataset.duolargoState} (contenuto fino a ${Math.round(maxRight)} pt)`;
+      }, { LIMIT });
     };
     const v1 = await tapAt();
+    await p2.screenshot({ path: path.join(out, `${name}-normale.png`) });
     const v2 = await tapAt();
     tocchi = { dopoPrimoTocco: v1, dopoSecondoTocco: v2 };
   }

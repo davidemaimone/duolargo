@@ -52,7 +52,8 @@
     mode: "largo", // "largo" | "diag"
     layout: "protetto", // "protetto" | "tutto"
     disabledSites: [],
-    tempOff: false, // spento con il pulsante, solo per questa pagina
+    tempOff: false, // non usato più per il pulsante (vedi narrow)
+    narrow: false, // "pagina normale": il contenuto torna a 382 pt ma il pulsante resta nella colonna
     active: false,
     W: 0,
     strip: 0,
@@ -147,7 +148,10 @@
 
   const style = document.createElement("style");
   style.id = "duolargo-style";
-  style.textContent = `html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }`;
+  style.textContent = `
+    html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }
+    html.duolargo-narrow { padding-right: var(--duolargo-strip) !important; box-sizing: border-box !important; }
+  `;
 
   function updateLock() {
     const vv = window.visualViewport;
@@ -221,6 +225,13 @@
     return null;
   }
 
+  function inFixed(el) {
+    for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+      if (getComputedStyle(e).position === "fixed") return true;
+    }
+    return false;
+  }
+
   function clipAncestor(el) {
     for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
       const o = getComputedStyle(e).overflowX;
@@ -273,6 +284,7 @@
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0 || r.left >= S.W) continue;
       if (sideScroller(el)) continue; // caroselli: scorrono, passano sotto la colonna per forza
+      if (S.narrow && !inFixed(el)) continue;
       let right = contentRight(el, interactive);
       const ca = clipAncestor(el);
       if (ca) right = Math.min(right, ca.getBoundingClientRect().right);
@@ -323,7 +335,10 @@
   }
 
   function protect() {
-    if (!S.active || S.layout !== "protetto") return;
+    if (!S.active) return;
+    // in "pagina normale" si sistemano solo le barre fisse (il resto sta già entro 382 pt);
+    // con "tutto schermo" non si tocca niente
+    if (!S.narrow && S.layout !== "protetto") return;
     for (let i = 0; i < 6; i++) if (protectPass() === 0) break;
   }
 
@@ -344,12 +359,12 @@
   function scheduleProtect(delay = 400) {
     clearTimeout(protectTimer);
     protectTimer = setTimeout(() => {
-      if (S.active && S.layout === "protetto") protect();
+      protect();
     }, delay);
   }
 
   const domObserver = new MutationObserver((records) => {
-    if (!S.active || S.layout !== "protetto") return;
+    if (!S.active || (!S.narrow && S.layout !== "protetto")) return;
     for (const r of records) {
       if (r.addedNodes.length && !(r.target.id === "duolargo-host")) {
         scheduleProtect(500);
@@ -378,7 +393,9 @@
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
       }
-      button.off { width: 34px; height: 34px; border-radius: 17px; opacity: .75; }
+      button.off { opacity: .6; }
+      button.moving { opacity: 0; transition: none; }
+      button { transition: opacity .15s; }
       button[hidden] { display: none; }
       svg { width: 22px; height: 22px; }
       .toast {
@@ -407,31 +424,56 @@
     toastTimer = setTimeout(() => (toast.hidden = true), 2200);
   }
 
+  // Con la pagina allargata Safari impagina gli elementi fissi su un'area più alta di quella visibile:
+  // per restare fermo rispetto allo schermo il pulsante segue la "finestra visibile" (visualViewport).
   function placeButton() {
-    const show = S.mode === "largo" && siteEnabled() && (S.active || S.tempOff);
+    const show = S.mode === "largo" && siteEnabled() && S.active;
     btn.hidden = !show;
     if (!show) return;
-    btn.classList.toggle("off", !S.active);
-    const top = Math.round(innerHeight * 0.6);
-    btn.style.top = `${top}px`;
-    if (S.active) {
-      // i tasti di Safari sono centrati a circa il 42% della colonna (misurato sullo screenshot)
-      btn.style.right = `${Math.round(S.strip * 0.58 - 22)}px`;
-    } else {
-      btn.style.right = "6px"; // pagina normale: il pulsante resta dentro la pagina
-    }
+    btn.classList.toggle("off", S.narrow);
+    const vv = window.visualViewport;
+    const top = vv ? vv.offsetTop + vv.height * 0.6 : innerHeight * 0.6;
+    btn.style.top = `${Math.round(top - 22)}px`;
+    btn.style.right = `${Math.round(S.strip * 0.58 - 22)}px`;
+    document.documentElement.dataset.duolargoState = S.narrow ? "normale" : "larga";
+  }
+
+  let placeQueued = false;
+  function queuePlace() {
+    if (placeQueued) return;
+    placeQueued = true;
+    requestAnimationFrame(() => { placeQueued = false; placeButton(); });
+  }
+
+  // Mentre la pagina scorre Safari sposta in ritardo gli elementi fissi: il pulsante si dissolve
+  // e ricompare al suo posto quando la pagina è ferma. Il tocco continua a funzionare.
+  let moveTimer = 0;
+  function onMove() {
+    if (btn.hidden) return;
+    btn.classList.add("moving");
+    clearTimeout(moveTimer);
+    moveTimer = setTimeout(() => { placeButton(); btn.classList.remove("moving"); }, 220);
+  }
+  window.addEventListener("scroll", onMove, { passive: true });
+  window.visualViewport?.addEventListener("scroll", () => { onMove(); queuePlace(); }, { passive: true });
+  window.visualViewport?.addEventListener("resize", queuePlace, { passive: true });
+
+  function setNarrow(on) {
+    S.narrow = on;
+    document.documentElement.style.setProperty("--duolargo-strip", `${S.strip}px`);
+    document.documentElement.classList.toggle("duolargo-narrow", on);
+    unprotect();
+    requestAnimationFrame(() => requestAnimationFrame(protect));
   }
 
   function toggle() {
     if (S.active) {
-      S.tempOff = true;
-      deactivate();
-      showToast("Pagina normale. Tocca di nuovo per allargarla.");
+      setNarrow(!S.narrow);
+      showToast(S.narrow ? "Pagina normale. Tocca di nuovo per allargarla." :
+        S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
     } else {
-      S.tempOff = false;
       evaluate();
       if (!S.active) showToast(`Non posso allargare: ${S.reason}.`);
-      else showToast(S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
     }
     placeButton();
   }
@@ -491,6 +533,8 @@
   function deactivate() {
     if (!S.active) return;
     S.active = false;
+    if (S.narrow) setNarrow(false);
+    S.narrow = false;
     metaObserver.disconnect();
     domObserver.disconnect();
     clearTimeout(protectTimer);
