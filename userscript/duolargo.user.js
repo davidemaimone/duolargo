@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.4.5
+// @version      0.4.6
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -390,7 +390,7 @@ const DUOLARGO_USERSCRIPT = true;
     }
   }
 
-  btn.addEventListener("click", () => {
+  function toggle() {
     if (S.active) {
       S.tempOff = true;
       deactivate();
@@ -402,6 +402,39 @@ const DUOLARGO_USERSCRIPT = true;
       else showToast(S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
     }
     placeButton();
+  }
+
+  // Safari non sempre consegna il tocco al pulsante (il punto disegnato e quello "toccabile"
+  // non coincidono con la pagina allargata). Quindi controlliamo noi le coordinate di ogni tocco.
+  let tap = null;
+  let lastToggle = 0;
+  function onButton(x, y) {
+    if (btn.hidden) return false;
+    const r = btn.getBoundingClientRect();
+    const m = 10;
+    return x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m;
+  }
+  document.addEventListener("touchstart", (e) => {
+    const t = e.touches[0];
+    tap = t && e.touches.length === 1 && onButton(t.clientX, t.clientY) ? { x: t.clientX, y: t.clientY } : null;
+    if (tap && e.cancelable) e.preventDefault();
+  }, { capture: true, passive: false });
+  document.addEventListener("touchend", (e) => {
+    if (!tap) return;
+    const t = e.changedTouches[0];
+    const start = tap;
+    tap = null;
+    if (!t || Math.abs(t.clientX - start.x) > 12 || Math.abs(t.clientY - start.y) > 12) return;
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+    lastToggle = Date.now();
+    toggle();
+  }, { capture: true, passive: false });
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (Date.now() - lastToggle < 600) return; // già gestito dal tocco
+    lastToggle = Date.now();
+    toggle();
   });
 
   // ---------- attivazione ----------
