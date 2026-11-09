@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.2
+// @version      0.6.3
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -306,10 +306,20 @@ const DUOLARGO_USERSCRIPT = true;
   // che si può accorciare senza schiacciare il testo (contenuto ≥ 160 pt e ≥ 55% di prima).
   // Mai due margini uno dentro l'altro: se il contenitore o un suo antenato è già stato accorciato
   // e l'elemento sborda ancora (testo che non va a capo, larghezze fisse, 100vw…) ci si arrende.
+  // Slider/ticker: contenitore con overflow nascosto il cui contenuto è più largo di lui.
+  function sliderAncestor(el) {
+    for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+      const ox = getComputedStyle(e).overflowX;
+      if ((ox === "hidden" || ox === "clip") && e.scrollWidth > e.clientWidth + 2) return e;
+    }
+    return null;
+  }
+
   function planFor(el, interactive, limit) {
-    let c = blockContainer(el, !interactive);
-    while (c && c !== document.body && c !== document.documentElement) {
-      if (S.padded.has(c)) return null;
+    // dentro uno slider non si accorciano le singole slide: si parte dallo slider intero
+    let c = sliderAncestor(el) || blockContainer(el, !interactive);
+    let clipFallback = null; // slider/ticker con overflow nascosto, se non si trova di meglio
+    const measure = (c) => {
       const cs = getComputedStyle(c);
       const cr = c.getBoundingClientRect();
       const pr = parseFloat(cs.paddingRight) || 0;
@@ -317,24 +327,43 @@ const DUOLARGO_USERSCRIPT = true;
       const br = parseFloat(cs.borderRightWidth) || 0;
       const bl = parseFloat(cs.borderLeftWidth) || 0;
       const need = Math.ceil(cr.right - br - pr - limit);
-      if (need <= 0) return null; // il contenitore finisce già prima: il problema è altrove
       const contentNow = cr.width - pl - pr - bl - br;
-      if (contentNow - need >= Math.max(160, contentNow * 0.55)) {
+      return { cs, cr, pr, need, ok: need > 0 && contentNow - need >= Math.max(160, contentNow * 0.55) };
+    };
+    while (c && c !== document.body && c !== document.documentElement) {
+      if (S.padded.has(c)) return null;
+      const m = measure(c);
+      if (m.need <= 0) return null; // il contenitore finisce già prima: il problema è altrove
+      // uno slider o un ticker con overflow nascosto mostrerebbe il contenuto nascosto nel margine
+      // aggiunto: meglio accorciare il contenitore che lo racchiude (si restringe tutto intero)
+      const ox = m.cs.overflowX;
+      if ((ox === "hidden" || ox === "clip") && c.scrollWidth > c.clientWidth + 2) {
+        if (!clipFallback && m.ok) clipFallback = { c, value: m.pr + m.need, need: m.need, clip: Math.ceil(m.cr.right - limit) };
+        c = blockContainer(c, false);
+        continue;
+      }
+      if (m.ok) {
         for (let a = c.parentElement; a && a !== document.documentElement; a = a.parentElement) {
           if (S.padded.has(a)) return null;
         }
-        return { c, value: pr + need, need };
+        return { c, value: m.pr + m.need, need: m.need };
       }
       c = blockContainer(c, false);
     }
-    return null;
+    return clipFallback; // nessun contenitore esterno adatto: si accorcia lo slider e si ritaglia
   }
 
   // Caroselli e immagini larghe dentro un contenitore accorciato: li si riporta fino al bordo
   // dello schermo (sotto i tasti di Safari ci possono stare), mentre testo e pulsanti restano protetti.
+  // Solo righe che l'utente fa scorrere col dito (overflow auto/scroll). Gli slider "a scatti"
+  // con overflow nascosto contengono spesso titoli e testo: allargarli mostra la slide successiva
+  // sotto la colonna. Si riallargano solo se quasi privi di testo.
   function isCarousel(el, cs) {
     const ox = cs.overflowX;
-    return (ox === "auto" || ox === "scroll" || ox === "hidden" || ox === "clip") && el.scrollWidth > el.clientWidth + 2;
+    if (el.scrollWidth <= el.clientWidth + 2) return false;
+    if (ox === "auto" || ox === "scroll") return true;
+    if (ox === "hidden" || ox === "clip") return (el.textContent || "").trim().length < 40;
+    return false;
   }
 
   function insideBled(el) {
@@ -366,7 +395,9 @@ const DUOLARGO_USERSCRIPT = true;
         walker.currentNode = next;
       }
     }
-    for (const [el, extra, width] of targets) {
+    for (const [el, extraWanted, width] of targets) {
+      // mai oltre il bordo dello schermo
+      const extra = Math.min(extraWanted, Math.floor(S.W - el.getBoundingClientRect().right));
       if (extra <= 0) continue;
       S.bled.set(el, ["width", "max-width", "margin-right"].map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)]));
       el.style.setProperty("max-width", "none", "important");
@@ -419,6 +450,12 @@ const DUOLARGO_USERSCRIPT = true;
         if (pads.has(a)) { pads.delete(c); break; }
       }
     }
+    for (const [c, { clip }] of pads) {
+      if (!clip || S.clipped.has(c)) continue;
+      const radius = getComputedStyle(c).borderTopRightRadius;
+      S.clipped.set(c, [c.style.getPropertyValue("clip-path"), c.style.getPropertyPriority("clip-path")]);
+      c.style.setProperty("clip-path", `inset(0 ${clip}px 0 0${radius && radius !== "0px" ? ` round ${radius}` : ""})`, "important");
+    }
     for (const [c, { value }] of pads) {
       S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right"),
                        c.style.getPropertyValue("box-sizing"), c.style.getPropertyPriority("box-sizing")]);
@@ -440,8 +477,21 @@ const DUOLARGO_USERSCRIPT = true;
     return pads.size + shifts.size + clips.size;
   }
 
+  function unbleed() {
+    const put = (el, prop, v, p) => (v ? el.style.setProperty(prop, v, p) : el.style.removeProperty(prop));
+    for (const [el, props] of S.bled) for (const [prop, v, p] of props) put(el, prop, v, p);
+    S.bled.clear();
+  }
+
   function protect() {
     if (!S.active) return;
+    protectInner();
+    // la pagina non deve mai diventare più larga dello schermo: Safari sposterebbe gli elementi
+    // fissi (il pulsante finirebbe in mezzo alla pagina e non risponderebbe più ai tocchi)
+    if (document.documentElement.scrollWidth > S.W + 1 && S.bled.size) unbleed();
+  }
+
+  function protectInner() {
     // in "pagina normale" si sistemano solo le barre fisse (il resto sta già entro 382 pt);
     // con "tutto schermo" non si tocca niente
     if (!S.narrow && S.layout !== "protetto") return;

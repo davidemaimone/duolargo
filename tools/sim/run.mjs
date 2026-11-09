@@ -136,7 +136,8 @@ for (const f of fixtures) {
           let skip = false;
           for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
             const c = getComputedStyle(e);
-            if (c.position === "fixed" || (e !== el && c.overflowX !== "visible")) { skip = true; break; }
+            const isRoot = e === document.body || e === document.documentElement;
+            if (c.position === "fixed" || (e !== el && !isRoot && c.overflowX !== "visible")) { skip = true; break; }
           }
           if (skip) continue;
           const r = el.getBoundingClientRect();

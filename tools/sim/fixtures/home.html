@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home con slider (stile iSpazio home)</title>
+<style>
+*{box-sizing:border-box} html,body{overflow-x:hidden} body{margin:0;font-family:Helvetica,Arial,sans-serif;background:#d9e2ef;color:#111827}
+.top{background:#fff}
+header{position:sticky;top:0;z-index:10;background:#fff;display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #e3e3e3}
+.logo{font-weight:800;font-size:21px;margin-right:auto}
+.icon{width:36px;height:36px;border:1px solid #ddd;border-radius:10px;background:#f6f7f9;padding:0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;border-bottom:1px solid #e5e5e5}
+.chips a{flex:none;padding:8px 12px;border:1px solid #ddd;border-radius:10px;color:#333;text-decoration:none}
+.ticker{display:flex;align-items:center;gap:8px;padding:8px 12px;white-space:nowrap;overflow:hidden}
+.ticker b{background:#b5581f;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px}
+.ticker .run{display:inline-block}
+.stories{display:flex;gap:14px;overflow-x:auto;padding:12px;background:#f5f7fb}
+.story{flex:none;width:66px;text-align:center;font-size:11px}
+.story i{display:block;width:66px;height:66px;border-radius:50%;border:3px solid #d0406a;background:linear-gradient(135deg,#334,#89a);margin-bottom:4px}
+main{padding:16px}
+.slider{overflow:hidden;border-radius:14px;background:#fff}
+.track{display:flex;transition:transform .3s}
+.slide{flex:0 0 100%;position:relative}
+.slide .img{aspect-ratio:16/9;background:linear-gradient(135deg,#c9a77c,#4e6fa8)}
+.slide .bm{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:8px;background:#333;color:#fff;border:0}
+.slide .body{padding:14px}
+.slide .cat{color:#2f62d6;font-weight:700;font-size:12px}
+.slide h2{font-size:20px;margin:6px 0}
+.slide .meta{display:flex;justify-content:space-between;color:#6b7280;font-size:13px}
+</style></head><body>
+<div class="top">
+<header><div class="logo">ispazio</div><button class="icon">⌕</button><button class="icon">♪</button><button class="icon">◉</button><button class="icon">⇥</button><button class="icon">☰</button></header>
+<nav class="chips"><a href="#">Offerte</a><a href="#">Sfondi</a><a href="#">Apple TV</a><a href="#">AppyDeals</a><a href="#">Recensioni</a><a href="#">Guide</a></nav>
+<div class="ticker"><b>BREAKING</b><span class="run">Elimina tutte le Pubblicità dal sito e dall'App con iSpazio Plus, scopri di più</span></div>
+<div class="stories"><div class="story"><i></i>Apple Intell…</div><div class="story"><i></i>Download i…</div><div class="story"><i></i>Apple Intell…</div><div class="story"><i></i>Accessori e…</div><div class="story"><i></i>Apple Music</div><div class="story"><i></i>Mac</div></div>
+</div>
+<main>
+<div class="slider"><div class="track">
+<div class="slide"><div class="img"></div><button class="bm">★</button><div class="body"><div class="cat">IPHONE DUO</div><h2><a href="#" style="color:inherit;text-decoration:none">Largo 1.1 per iPhone Duo: ora funziona per tutti, anche con le custodie, ed arriva la guida per configurarlo bene</a></h2><div class="meta"><span>8 Nov 2026</span><a href="#">💬 5</a></div></div></div>
+<div class="slide"><div class="img"></div><button class="bm">★</button><div class="body"><div class="cat">IOS 27</div><h2><a href="#" style="color:inherit;text-decoration:none">iOS 27.2.1 disponibile: ecco cosa cambia</a></h2><div class="meta"><span>7 Nov 2026</span><a href="#">💬 2</a></div></div></div>
+</div></div>
+</main>
+</body></html>
