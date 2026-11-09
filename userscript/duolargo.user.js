@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.5.1
+// @version      0.6.0
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
 // @inject-into  content
 // @noframes
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @updateURL    https://raw.githubusercontent.com/davidemaimone/duolargo/main/userscript/duolargo.user.js
 // @downloadURL  https://raw.githubusercontent.com/davidemaimone/duolargo/main/userscript/duolargo.user.js
 // ==/UserScript==
@@ -41,18 +43,36 @@ const DUOLARGO_USERSCRIPT = true;
   document.documentElement.setAttribute("data-duolargo", IS_USERSCRIPT ? "userscript" : "extension");
 
   // Nello userscript non ci sono le API delle estensioni: impostazioni in localStorage.
+  // Nello userscript non ci sono le API delle estensioni. Userscripts offre GM.getValue/GM.setValue,
+  // validi per tutti i siti; se mancano si usa localStorage (vale solo per il sito corrente).
   function userscriptApi() {
+    const gm = typeof GM !== "undefined" && GM.getValue && GM.setValue ? GM : null;
     const KEY = "duolargo:settings";
-    const read = () => {
+    const readLocal = () => {
       try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
     };
     return {
       storage: {
         local: {
-          get: (defaults) => Promise.resolve({ ...defaults, ...read() }),
-          set: (values) => {
-            try { localStorage.setItem(KEY, JSON.stringify({ ...read(), ...values })); } catch {}
-            return Promise.resolve();
+          async get(defaults) {
+            if (!gm) return { ...defaults, ...readLocal() };
+            const out = { ...defaults };
+            for (const k of Object.keys(defaults)) {
+              try {
+                const v = await gm.getValue(k);
+                if (v !== undefined && v !== null) out[k] = JSON.parse(v);
+              } catch {}
+            }
+            return out;
+          },
+          async set(values) {
+            if (!gm) {
+              try { localStorage.setItem(KEY, JSON.stringify({ ...readLocal(), ...values })); } catch {}
+              return;
+            }
+            for (const [k, v] of Object.entries(values)) {
+              try { await gm.setValue(k, JSON.stringify(v)); } catch {}
+            }
           },
         },
         onChanged: { addListener() {} },
@@ -68,6 +88,7 @@ const DUOLARGO_USERSCRIPT = true;
     mode: "largo", // "largo" | "diag"
     layout: "protetto", // "protetto" | "tutto"
     disabledSites: [],
+    narrowSites: [], // siti che si aprono in "pagina normale"
     tempOff: false, // non usato più per il pulsante (vedi narrow)
     narrow: false, // "pagina normale": il contenuto torna a 382 pt ma il pulsante resta nella colonna
     active: false,
@@ -111,8 +132,11 @@ const DUOLARGO_USERSCRIPT = true;
     if (/width\s*=\s*\d/i.test(meta.content) && !/width\s*=\s*device-width/i.test(meta.content) && S.originalViewport === undefined) {
       return { ok: false, reason: "il sito usa una larghezza fissa" };
     }
+    // Solo schermo esterno di iPhone Duo: 466 × 678 pt (457 con "Sposta bordo sinistro").
+    // Su iOS screen.width/height restano quelli in verticale anche ruotando il telefono.
+    const outer = screen.width >= 448 && screen.width <= 470 && screen.height >= 640 && screen.height <= 720;
+    if (!outer) return { ok: false, reason: "funziona solo sullo schermo esterno di iPhone Duo" };
     if (!matchMedia("(orientation: portrait)").matches) return { ok: false, reason: "in orizzontale non è ancora gestito" };
-    if (screen.width > 520) return { ok: false, reason: "sullo schermo interno non è ancora gestito" };
     const W = screen.width; // a schermo esterno la finestra di Safari occupa tutto lo schermo
     let strip = W - document.documentElement.clientWidth;
     if (strip < 40 || strip > 140) strip = outerWidth - innerWidth;
@@ -396,7 +420,7 @@ const DUOLARGO_USERSCRIPT = true;
   host.style.cssText =
     "all:initial!important;position:fixed!important;top:0!important;left:0!important;" +
     "width:0!important;height:0!important;z-index:2147483647!important;";
-  const root = host.attachShadow({ mode: "closed" });
+  const root = host.attachShadow({ mode: window.__DUOLARGO_TEST__ ? "open" : "closed" });
   root.innerHTML = `
     <style>
       button {
@@ -421,6 +445,28 @@ const DUOLARGO_USERSCRIPT = true;
         text-align: center;
       }
       .toast[hidden] { display: none; }
+      .menu {
+        position: fixed; width: 250px; padding: 14px; border-radius: 18px;
+        background: rgba(28,28,32,.94); color: #f5f5f7;
+        -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+        box-shadow: 0 10px 34px rgba(0,0,0,.35);
+        font: 15px/1.35 -apple-system, system-ui, sans-serif;
+        -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      }
+      .menu[hidden] { display: none; }
+      .menu .t { margin: 0 0 10px; font-weight: 600; font-size: 16px; }
+      .menu .lbl { margin: 0 0 6px; color: #a1a1a8; font-size: 13px; }
+      .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: 11px; background: #3a3a40; }
+      .seg div { padding: 9px 4px; border-radius: 9px; text-align: center; font-size: 13.5px; }
+      .seg div.on { background: #f5f5f7; color: #1c1c1e; font-weight: 600; }
+      .menu .hint { margin: 8px 0 12px; color: #a1a1a8; font-size: 12.5px; }
+      .menu .row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                   padding: 11px 0; border-top: 1px solid rgba(255,255,255,.12); }
+      .sw { flex: none; width: 42px; height: 26px; border-radius: 13px; background: #55555c; position: relative; transition: background .15s; }
+      .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
+      .sw.on { background: #34c759; }
+      .sw.on::after { left: 19px; }
+      .menu .row.close { justify-content: center; color: #78aaeb; font-weight: 600; padding-bottom: 2px; }
     </style>
     <button type="button" hidden aria-label="Largo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -428,9 +474,25 @@ const DUOLARGO_USERSCRIPT = true;
       </svg>
     </button>
     <div class="toast" hidden></div>
+    <div class="menu" hidden>
+      <p class="t">DuoLargo</p>
+      <p class="lbl">Testo vicino alla colonna di Safari</p>
+      <div class="seg">
+        <div data-act="protetto">Testo protetto</div>
+        <div data-act="tutto">Tutto schermo</div>
+      </div>
+      <p class="hint"></p>
+      <div class="row" data-act="site"><span>Apri questo sito in pagina normale</span><span class="sw"></span></div>
+      <div class="row close" data-act="close">Chiudi</div>
+    </div>
   `;
   const btn = root.querySelector("button");
   const toast = root.querySelector(".toast");
+  const menu = root.querySelector(".menu");
+  const HINTS = {
+    protetto: "Sfondi e foto arrivano al bordo; testo, link e pulsanti si fermano prima dei tasti di Safari.",
+    tutto: "Tutta la pagina arriva al bordo, anche il testo: qualcosa può finire sotto i tasti.",
+  };
 
   let toastTimer = 0;
   function showToast(text) {
@@ -494,38 +556,138 @@ const DUOLARGO_USERSCRIPT = true;
     placeButton();
   }
 
+  // ---------- menu (pressione lunga sul pulsante) ----------
+
+  function siteNarrowByDefault() {
+    return S.narrowSites.includes(site);
+  }
+
+  function renderMenu() {
+    for (const o of menu.querySelectorAll(".seg [data-act]")) o.classList.toggle("on", o.dataset.act === S.layout);
+    menu.querySelector(".hint").textContent = HINTS[S.layout] || "";
+    menu.querySelector(".sw").classList.toggle("on", siteNarrowByDefault());
+  }
+
+  function placeMenu() {
+    const vv = window.visualViewport;
+    const offTop = vv ? vv.offsetTop : 0;
+    const visH = vv ? vv.height : innerHeight;
+    const b = btn.getBoundingClientRect();
+    const h = menu.getBoundingClientRect().height || 260;
+    const top = Math.max(offTop + 12, Math.min(offTop + visH - h - 12, b.top + b.height / 2 - h / 2));
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.right = `${Math.round(S.strip + 8)}px`;
+  }
+
+  function openMenu() {
+    renderMenu();
+    menu.hidden = false;
+    placeMenu();
+    document.documentElement.dataset.duolargoMenu = "aperto";
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    document.documentElement.dataset.duolargoMenu = "chiuso";
+  }
+
+  async function menuAction(act) {
+    if (act === "protetto" || act === "tutto") {
+      await api.storage.local.set({ layout: act });
+      setLayout(act);
+      renderMenu();
+      showToast(act === "protetto" ? "Layout: testo protetto" : "Layout: tutto schermo");
+    } else if (act === "site") {
+      const set = new Set(S.narrowSites);
+      if (set.has(site)) set.delete(site);
+      else set.add(site);
+      S.narrowSites = [...set];
+      await api.storage.local.set({ narrowSites: S.narrowSites });
+      if (S.active && siteNarrowByDefault() !== S.narrow) setNarrow(siteNarrowByDefault());
+      renderMenu();
+      placeButton();
+    } else if (act === "close") {
+      closeMenu();
+    }
+  }
+
   // Safari non sempre consegna il tocco al pulsante (il punto disegnato e quello "toccabile"
   // non coincidono con la pagina allargata). Quindi controlliamo noi le coordinate di ogni tocco.
-  let tap = null;
-  let lastToggle = 0;
-  function onButton(x, y) {
-    if (btn.hidden) return false;
-    const r = btn.getBoundingClientRect();
-    const m = 10;
-    return x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m;
-  }
+  const inRect = (el, x, y, m = 0) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m;
+  };
+  const onButton = (x, y) => !btn.hidden && inRect(btn, x, y, 10);
+
+  let tap = null; // { x, y, kind: "button" | "menu" | "outside", long }
+  let pressTimer = 0;
+  let lastHandled = 0;
+
   document.addEventListener("touchstart", (e) => {
+    clearTimeout(pressTimer);
     const t = e.touches[0];
-    tap = t && e.touches.length === 1 && onButton(t.clientX, t.clientY) ? { x: t.clientX, y: t.clientY } : null;
-    if (tap && e.cancelable) e.preventDefault();
+    if (!t || e.touches.length !== 1) { tap = null; return; }
+    const x = t.clientX, y = t.clientY;
+    if (!menu.hidden && inRect(menu, x, y)) {
+      tap = { x, y, kind: "menu" };
+      if (e.cancelable) e.preventDefault();
+    } else if (onButton(x, y)) {
+      tap = { x, y, kind: "button", long: false };
+      if (e.cancelable) e.preventDefault();
+      pressTimer = setTimeout(() => {
+        if (tap && tap.kind === "button") {
+          tap.long = true;
+          openMenu();
+        }
+      }, 450);
+    } else {
+      tap = menu.hidden ? null : { x, y, kind: "outside" };
+    }
   }, { capture: true, passive: false });
-  document.addEventListener("touchend", (e) => {
+
+  document.addEventListener("touchmove", (e) => {
     if (!tap) return;
-    const t = e.changedTouches[0];
-    const start = tap;
+    const t = e.touches[0];
+    if (t && (Math.abs(t.clientX - tap.x) > 12 || Math.abs(t.clientY - tap.y) > 12)) {
+      clearTimeout(pressTimer);
+      if (tap.kind !== "menu") tap = null;
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    clearTimeout(pressTimer);
+    if (!tap) return;
+    const cur = tap;
     tap = null;
-    if (!t || Math.abs(t.clientX - start.x) > 12 || Math.abs(t.clientY - start.y) > 12) return;
+    const t = e.changedTouches[0];
+    if (!t || Math.abs(t.clientX - cur.x) > 12 || Math.abs(t.clientY - cur.y) > 12) return;
+    if (cur.kind === "outside") { closeMenu(); return; }
     if (e.cancelable) e.preventDefault();
     e.stopPropagation();
-    lastToggle = Date.now();
-    toggle();
+    lastHandled = Date.now();
+    if (cur.kind === "menu") {
+      for (const o of menu.querySelectorAll("[data-act]")) {
+        if (inRect(o, t.clientX, t.clientY)) { menuAction(o.dataset.act); break; }
+      }
+    } else if (!cur.long) {
+      closeMenu();
+      toggle();
+    }
   }, { capture: true, passive: false });
+
+  // riserva: se il tocco arriva come click normale (es. nel simulatore senza touch)
   btn.addEventListener("click", (e) => {
     e.preventDefault();
-    if (Date.now() - lastToggle < 600) return; // già gestito dal tocco
-    lastToggle = Date.now();
+    if (Date.now() - lastHandled < 600) return;
+    lastHandled = Date.now();
     toggle();
   });
+  menu.addEventListener("click", (e) => {
+    if (Date.now() - lastHandled < 600) return;
+    const o = e.target.closest("[data-act]");
+    if (o) { lastHandled = Date.now(); menuAction(o.dataset.act); }
+  });
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
 
   // ---------- attivazione ----------
 
@@ -541,13 +703,15 @@ const DUOLARGO_USERSCRIPT = true;
     if (meta) metaObserver.observe(meta, { attributes: true, attributeFilter: ["content"] });
     updateLock();
     if (document.body) domObserver.observe(document.body, { childList: true, subtree: true });
-    requestAnimationFrame(() => requestAnimationFrame(protect));
+    if (siteNarrowByDefault()) setNarrow(true);
+    else requestAnimationFrame(() => requestAnimationFrame(protect));
     scheduleProtect(1200); // seconda passata per immagini e font caricati dopo
     placeButton();
   }
 
   function deactivate() {
     if (!S.active) return;
+    closeMenu();
     S.active = false;
     if (S.narrow) setNarrow(false);
     S.narrow = false;
@@ -590,6 +754,7 @@ const DUOLARGO_USERSCRIPT = true;
   window.addEventListener("load", () => scheduleProtect(300));
 
   function setLayout(layout) {
+    document.documentElement.dataset.duolargoLayout = layout;
     if (S.layout === layout) return;
     S.layout = layout;
     if (S.active) {
@@ -612,10 +777,12 @@ const DUOLARGO_USERSCRIPT = true;
   (document.head ?? document.documentElement).appendChild(style);
   (document.body ?? document.documentElement).appendChild(host);
 
-  api.storage.local.get({ mode: "largo", layout: "protetto", disabledSites: [] }).then((v) => {
+  api.storage.local.get({ mode: "largo", layout: "protetto", disabledSites: [], narrowSites: [] }).then((v) => {
     S.mode = v.mode;
     S.layout = v.layout;
+    document.documentElement.dataset.duolargoLayout = v.layout;
     S.disabledSites = v.disabledSites;
+    S.narrowSites = v.narrowSites || [];
     evaluate();
   });
 
@@ -624,6 +791,7 @@ const DUOLARGO_USERSCRIPT = true;
     if (changes.mode) { S.mode = changes.mode.newValue; reEval = true; }
     if (changes.disabledSites) { S.disabledSites = changes.disabledSites.newValue ?? []; reEval = true; }
     if (changes.layout) setLayout(changes.layout.newValue);
+    if (changes.narrowSites) S.narrowSites = changes.narrowSites.newValue ?? [];
     if (reEval) {
       if (S.mode !== "largo" || !siteEnabled()) deactivate();
       S.tempOff = false;

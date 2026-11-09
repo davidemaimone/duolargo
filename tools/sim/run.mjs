@@ -148,6 +148,34 @@ for (const f of fixtures) {
     await p2.screenshot({ path: path.join(out, `${name}-normale.png`) });
     const v2 = await tapAt();
     tocchi = { dopoPrimoTocco: v1, dopoSecondoTocco: v2 };
+
+    // 4) pressione lunga -> menu -> "Tutto schermo" -> "Testo protetto"
+    const cdp = await c2.newCDPSession(p2);
+    const pos = await p2.evaluate(({ W, STRIP }) => ({ x: W - Math.round(STRIP * 0.58 - 22) - 22, y: Math.round(visualViewport.height * 0.6) }), { W, STRIP });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: pos.x, y: pos.y }] });
+    await p2.waitForTimeout(700);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await p2.waitForTimeout(200);
+    const menuOpen = await p2.evaluate(() => document.documentElement.dataset.duolargoMenu);
+    await p2.screenshot({ path: path.join(out, `${name}-menu.png`) });
+    const tapOption = async (act) => {
+      const c = await p2.evaluate((act) => {
+        const r = document.getElementById("duolargo-host").shadowRoot.querySelector(`[data-act="${act}"]`).getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, act);
+      await p2.touchscreen.tap(c.x, c.y);
+      await p2.waitForTimeout(500);
+      return p2.evaluate(() => {
+        let n = 0;
+        for (const el of document.body.getElementsByTagName("*")) if (el.style.getPropertyPriority("padding-right") === "important") n++;
+        return `${document.documentElement.dataset.duolargoLayout} (contenitori modificati: ${n})`;
+      });
+    };
+    const l1 = await tapOption("tutto");
+    const l2 = await tapOption("protetto");
+    await tapOption("close");
+    const menuClosed = await p2.evaluate(() => document.documentElement.dataset.duolargoMenu);
+    tocchi.menu = { aperto: menuOpen, tuttoSchermo: l1, testoProtetto: l2, dopoChiudi: menuClosed };
   }
   await c2.close();
   results[name] = { ...check, errori: errors, tocchi, sfondo: bg };

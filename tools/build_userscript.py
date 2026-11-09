@@ -20,6 +20,8 @@ header = f"""// ==UserScript==
 // @run-at       document-end
 // @inject-into  content
 // @noframes
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @updateURL    {url}
 // @downloadURL  {url}
 // ==/UserScript==
