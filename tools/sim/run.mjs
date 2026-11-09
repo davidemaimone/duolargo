@@ -111,7 +111,7 @@ for (const f of fixtures) {
   await c1.close();
 
   // 2) DuoLargo attivo: pagina a 466 pt, colonna di 84 pt a destra
-  const c2 = await browser.newContext({ ...opts, viewport: { width: W, height: H } });
+  const c2 = await browser.newContext({ ...opts, viewport: { width: W, height: H }, screen: { width: W, height: H } });
   await c2.addInitScript(`window.__DUOLARGO_TEST__ = { W: ${W}, strip: ${STRIP} };`);
   const p2 = await c2.newPage();
   const errors = [];
@@ -191,6 +191,22 @@ for (const f of fixtures) {
     const menuClosed = await p2.evaluate(() => document.documentElement.dataset.duolargoMenu);
     tocchi.menu = { aperto: menuOpen, tuttoSchermo: l1, testoProtetto: l2, dopoChiudi: menuClosed };
   }
+  // 5) si apre il telefono: schermo interno più largo -> pagina normale e niente pulsante;
+  //    si richiude -> torna allargata
+  const cdpF = await c2.newCDPSession(p2);
+  await cdpF.send("Emulation.setDeviceMetricsOverride", { width: 538, height: 760, deviceScaleFactor: 2, mobile: true, screenWidth: 538, screenHeight: 760 });
+  await p2.waitForTimeout(1500);
+  const aperto = await p2.evaluate(() => ({
+    meta: document.querySelector('meta[name="viewport"]')?.content,
+    pulsante: !document.getElementById("duolargo-host").shadowRoot.querySelector("button").hidden,
+  }));
+  await cdpF.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 2, mobile: true, screenWidth: W, screenHeight: H });
+  await p2.waitForTimeout(1500);
+  const richiuso = await p2.evaluate(() => ({
+    meta: document.querySelector('meta[name="viewport"]')?.content,
+    pulsante: !document.getElementById("duolargo-host").shadowRoot.querySelector("button").hidden,
+  }));
+  tocchi.telefono = { aperto, richiuso };
   await c2.close();
   results[name] = { ...check, errori: errors, tocchi, pulsante, sfondo: bg };
 }

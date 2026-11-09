@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.8
+// @version      0.6.9
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -125,7 +125,17 @@ const DUOLARGO_USERSCRIPT = true;
     } catch {}
   }
 
+  // Siamo sullo schermo esterno di iPhone Duo? 466 × 678 pt (457 con "Sposta bordo sinistro").
+  // Su iOS screen.width/height restano quelli in verticale anche ruotando il telefono.
+  // In più la finestra di Safari non deve essere più larga dello schermo esterno: aprendo il
+  // telefono screen.* può aggiornarsi in ritardo, outerWidth cambia subito.
+  function onOuterScreen() {
+    const sw = screen.width, sh = screen.height;
+    return sw >= 448 && sw <= 470 && sh >= 640 && sh <= 720 && outerWidth <= 480;
+  }
+
   function measure() {
+    if (!onOuterScreen()) return { ok: false, reason: "funziona solo sullo schermo esterno di iPhone Duo" };
     // Gancio per il simulatore (tools/sim): la pagina di test fornisce larghezza e colonna.
     if (window.__DUOLARGO_TEST__) return { ok: true, ...window.__DUOLARGO_TEST__ };
     const meta = document.querySelector('meta[name="viewport"]');
@@ -133,10 +143,6 @@ const DUOLARGO_USERSCRIPT = true;
     if (/width\s*=\s*\d/i.test(meta.content) && !/width\s*=\s*device-width/i.test(meta.content) && S.originalViewport === undefined) {
       return { ok: false, reason: "il sito usa una larghezza fissa" };
     }
-    // Solo schermo esterno di iPhone Duo: 466 × 678 pt (457 con "Sposta bordo sinistro").
-    // Su iOS screen.width/height restano quelli in verticale anche ruotando il telefono.
-    const outer = screen.width >= 448 && screen.width <= 470 && screen.height >= 640 && screen.height <= 720;
-    if (!outer) return { ok: false, reason: "funziona solo sullo schermo esterno di iPhone Duo" };
     if (!matchMedia("(orientation: portrait)").matches) return { ok: false, reason: "in orizzontale non è ancora gestito" };
     const W = screen.width; // a schermo esterno la finestra di Safari occupa tutto lo schermo
     let strip = W - document.documentElement.clientWidth;
@@ -710,7 +716,7 @@ const DUOLARGO_USERSCRIPT = true;
 
   function placeButton() {
     const zoomed = isZoomed();
-    const show = S.mode === "largo" && siteEnabled() && S.active && !zoomed;
+    const show = S.mode === "largo" && siteEnabled() && S.active && !zoomed && onOuterScreen();
     btn.hidden = !show;
     if (zoomed && !menu.hidden) closeMenu();
     document.documentElement.dataset.duolargoZoom = zoomed ? "si" : "no";
@@ -984,6 +990,25 @@ const DUOLARGO_USERSCRIPT = true;
 
   window.addEventListener("resize", onResize, { passive: true });
   window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
+
+  // Aprendo o chiudendo il telefono Safari non sempre avvisa la pagina in tempo (eventi persi
+  // mentre la pagina era sospesa, misure dello schermo aggiornate in ritardo). Quindi si
+  // ricontrolla anche a intervalli regolari e ogni volta che la pagina torna visibile.
+  function watchdog() {
+    if (S.mode !== "largo") return;
+    if (S.active && !onOuterScreen()) {
+      deactivate();
+      S.reason = "funziona solo sullo schermo esterno di iPhone Duo";
+      placeButton();
+      return;
+    }
+    if (!S.active && !S.tempOff && siteEnabled() && onOuterScreen()) evaluate();
+  }
+  const watchSoon = () => { watchdog(); setTimeout(watchdog, 300); setTimeout(watchdog, 1200); };
+  for (const ev of ["resize", "orientationchange", "pageshow", "focus"]) window.addEventListener(ev, watchSoon, { passive: true });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) watchSoon(); });
+  window.visualViewport?.addEventListener("resize", watchdog, { passive: true });
+  setInterval(watchdog, 800);
   window.visualViewport?.addEventListener("scroll", updateLock, { passive: true });
   window.visualViewport?.addEventListener("resize", updateLock, { passive: true });
   window.addEventListener("load", () => scheduleProtect(300));

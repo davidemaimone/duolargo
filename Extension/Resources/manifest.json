@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "DuoLargo",
   "description": "Fa usare alle pagine tutto lo schermo esterno di iPhone Duo, anche sotto i comandi di Safari.",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "icons": {
     "48": "icon-48.png",
     "96": "icon-96.png",
