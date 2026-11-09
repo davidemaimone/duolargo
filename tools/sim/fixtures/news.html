@@ -34,6 +34,14 @@ article h2{font-size:24px;margin:0 0 8px}
 article p{line-height:1.6;font-size:17px}
 .social{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
 .social a{background:#fff;border-radius:12px;padding:14px;text-decoration:none;color:#333}
+.app{background:#fff;border:1px solid #e3e6ee;border-radius:16px;padding:16px;margin:16px 0}
+.app .head{display:flex;gap:12px;align-items:center}
+.app .ic{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#ff8a3d,#e0207a);flex:none}
+.app h3{margin:0;font-size:19px}.app small{color:#667}
+.app .dl{display:block;margin:12px 0;padding:12px;border-radius:12px;background:#1f64d6;color:#fff;text-align:center;text-decoration:none;font-weight:600}
+.app .car{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory}
+.app .car div{flex:none;width:100px;height:200px;border-radius:14px;background:linear-gradient(180deg,#6d8fb8,#2b3346);scroll-snap-align:start}
+.app .car div:nth-child(2n){background:linear-gradient(180deg,#c9c9c9,#5a4636)}
 .cookie{position:fixed;left:0;right:0;bottom:0;background:#222;color:#fff;padding:12px;display:flex;gap:10px;align-items:center;z-index:20}
 .cookie p{margin:0;font-size:13px;flex:1}
 .cookie button{flex:none;padding:8px 14px;border:0;border-radius:8px;background:#2f7bf5;color:#fff}
@@ -54,6 +62,9 @@ article p{line-height:1.6;font-size:17px}
 <article><h2>Largo 1.1 funziona anche con “Sposta bordo sinistro”</h2>
 <p>Chi usa una custodia che copre il bordo sinistro dello schermo esterno di iPhone Duo può attivare l'opzione Sposta bordo sinistro nelle Impostazioni, alla voce Schermo e luminosità. Con questa opzione accesa iOS aggiunge a sinistra una sottile striscia nera.</p>
 <p>Nessuna funzione di iOS o del web dice a un'estensione se questa opzione è attiva, e Largo non poteva saperlo. <a href="#">Leggi la guida completa</a> per configurarlo bene.</p></article>
+<div class="app"><div class="head"><div class="ic"></div><div><h3>Wallpapers Central</h3><small>Migliaia di sfondi in alta qualità</small></div></div>
+<a class="dl" href="#">Scarica</a>
+<div class="car"><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
 <div class="social"><a href="#">f 172K Facebook</a><a href="#">X 73K Twitter</a><a href="#">◎ 82K Instagram</a><a href="#">▶ 45K YouTube</a></div>
 </main>
 <button class="totop">↑</button>

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.1
+// @version      0.6.2
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -99,6 +99,7 @@ const DUOLARGO_USERSCRIPT = true;
     padded: new Map(), // elemento -> padding-right inline originale
     moved: new Map(), // elemento posizionato -> {prop, value, priority}
     clipped: new Map(), // contenitore -> clip-path inline originale
+    bled: new Map(), // carosello/immagine riallargato sotto la colonna -> stile inline originale
     reason: "",
     ignoreResizeUntil: 0,
   };
@@ -322,11 +323,56 @@ const DUOLARGO_USERSCRIPT = true;
         for (let a = c.parentElement; a && a !== document.documentElement; a = a.parentElement) {
           if (S.padded.has(a)) return null;
         }
-        return { c, value: pr + need };
+        return { c, value: pr + need, need };
       }
       c = blockContainer(c, false);
     }
     return null;
+  }
+
+  // Caroselli e immagini larghe dentro un contenitore accorciato: li si riporta fino al bordo
+  // dello schermo (sotto i tasti di Safari ci possono stare), mentre testo e pulsanti restano protetti.
+  function isCarousel(el, cs) {
+    const ox = cs.overflowX;
+    return (ox === "auto" || ox === "scroll" || ox === "hidden" || ox === "clip") && el.scrollWidth > el.clientWidth + 2;
+  }
+
+  function insideBled(el) {
+    for (let e = el; e && e !== document.body; e = e.parentElement) if (S.bled.has(e)) return true;
+    return false;
+  }
+
+  function bleed(pads, limit) {
+    const targets = [];
+    for (const [c, { need }] of pads) {
+      const cr = c.getBoundingClientRect();
+      const contentW = cr.width - (parseFloat(getComputedStyle(c).paddingLeft) || 0) - need;
+      const walker = document.createTreeWalker(c, NodeFilter.SHOW_ELEMENT);
+      for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+        if (S.bled.has(el) || el.id === "duolargo-host") continue;
+        const cs = getComputedStyle(el);
+        if (cs.position === "absolute" || cs.position === "fixed") continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        const media = MEDIA.has(el.tagName) && r.width >= contentW * 0.9;
+        if (!media && !isCarousel(el, cs)) continue;
+        // deve arrivare quasi al bordo del contenuto accorciato
+        if (r.right < limit - 4) continue;
+        targets.push([el, Math.round(limit + need - r.right), r.width]);
+        // i discendenti di un elemento riallargato vengono con lui: si salta il sottoalbero
+        let next = el;
+        while (next && !next.nextElementSibling && next !== c) next = next.parentElement;
+        if (!next || next === c) break;
+        walker.currentNode = next;
+      }
+    }
+    for (const [el, extra, width] of targets) {
+      if (extra <= 0) continue;
+      S.bled.set(el, ["width", "max-width", "margin-right"].map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)]));
+      el.style.setProperty("max-width", "none", "important");
+      el.style.setProperty("width", `${Math.round(width + extra)}px`, "important");
+      el.style.setProperty("margin-right", `-${extra}px`, "important");
+    }
   }
 
   function protectPass() {
@@ -343,6 +389,7 @@ const DUOLARGO_USERSCRIPT = true;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0 || r.left >= S.W) continue;
       if (sideScroller(el)) continue; // caroselli: scorrono, passano sotto la colonna per forza
+      if (insideBled(el)) continue;
       if (S.narrow && !inFixed(el)) continue;
       let right = contentRight(el, interactive);
       const ca = clipAncestor(el);
@@ -362,7 +409,7 @@ const DUOLARGO_USERSCRIPT = true;
       }
       const plan = planFor(el, interactive, limit);
       if (!plan || pads.has(plan.c)) continue;
-      pads.set(plan.c, plan.value);
+      pads.set(plan.c, plan);
     }
 
     // scritture tutte insieme, dopo le letture
@@ -372,12 +419,13 @@ const DUOLARGO_USERSCRIPT = true;
         if (pads.has(a)) { pads.delete(c); break; }
       }
     }
-    for (const [c, value] of pads) {
+    for (const [c, { value }] of pads) {
       S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right"),
                        c.style.getPropertyValue("box-sizing"), c.style.getPropertyPriority("box-sizing")]);
       c.style.setProperty("box-sizing", "border-box", "important");
       c.style.setProperty("padding-right", `${value}px`, "important");
     }
+    bleed(pads, limit);
     for (const [f, extra] of shifts) {
       const cs = getComputedStyle(f);
       const prop = cs.right !== "auto" ? "right" : "left";
@@ -408,6 +456,8 @@ const DUOLARGO_USERSCRIPT = true;
     }
     for (const [f, { prop, value, priority }] of S.moved) put(f, prop, value, priority);
     for (const [c, [v, p]] of S.clipped) put(c, "clip-path", v, p);
+    for (const [el, props] of S.bled) for (const [prop, v, p] of props) put(el, prop, v, p);
+    S.bled.clear();
     S.padded.clear();
     S.moved.clear();
     S.clipped.clear();
