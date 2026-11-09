@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.4.1
+// @version      0.4.2
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -89,17 +89,33 @@ const DUOLARGO_USERSCRIPT = true;
   }
 
   // Misura la colonna PRIMA di modificare la pagina (dopo la misura si falsa).
+  const CACHE_KEY = "duolargo:strip";
+  function cachedStrip() {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "{}")[`${screen.width}x${screen.height}`] || 0; } catch { return 0; }
+  }
+  function saveStrip(v) {
+    try {
+      const all = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+      all[`${screen.width}x${screen.height}`] = v;
+      localStorage.setItem(CACHE_KEY, JSON.stringify(all));
+    } catch {}
+  }
+
   function measure() {
     const meta = document.querySelector('meta[name="viewport"]');
-    if (!meta || !/width\s*=\s*device-width/i.test(meta.content)) {
-      return { ok: false, reason: "pagina senza viewport per dispositivi mobili" };
+    if (!meta) return { ok: false, reason: "il sito non è ottimizzato per smartphone" };
+    if (/width\s*=\s*\d/i.test(meta.content) && !/width\s*=\s*device-width/i.test(meta.content) && S.originalViewport === undefined) {
+      return { ok: false, reason: "il sito usa una larghezza fissa" };
     }
-    const strip = outerWidth - innerWidth;
-    if (!matchMedia("(orientation: portrait)").matches) return { ok: false, reason: "orizzontale (non ancora gestito)" };
-    if (screen.width > 520) return { ok: false, reason: "schermo interno (non ancora gestito)" };
-    if (outerWidth < screen.width - 12) return { ok: false, reason: "finestra non a tutto schermo" };
-    if (strip < 40 || strip > 140) return { ok: false, reason: `nessuna colonna di comandi (${strip} pt)` };
-    return { ok: true, W: outerWidth, strip };
+    if (!matchMedia("(orientation: portrait)").matches) return { ok: false, reason: "in orizzontale non è ancora gestito" };
+    if (screen.width > 520) return { ok: false, reason: "sullo schermo interno non è ancora gestito" };
+    const W = screen.width; // a schermo esterno la finestra di Safari occupa tutto lo schermo
+    let strip = W - document.documentElement.clientWidth;
+    if (strip < 40 || strip > 140) strip = outerWidth - innerWidth;
+    if (strip >= 40 && strip <= 140) saveStrip(strip);
+    else strip = cachedStrip();
+    if (!strip) return { ok: false, reason: `colonna di Safari non trovata (${W - document.documentElement.clientWidth} pt)` };
+    return { ok: true, W, strip };
   }
 
   // ---------- viewport ----------
@@ -377,7 +393,8 @@ const DUOLARGO_USERSCRIPT = true;
     } else {
       S.tempOff = false;
       evaluate();
-      if (S.active) showToast(S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
+      if (!S.active) showToast(`Non posso allargare: ${S.reason}.`);
+      else showToast(S.layout === "protetto" ? "Allargata, testo protetto" : "Allargata a tutto schermo");
     }
     placeButton();
   });
@@ -438,12 +455,16 @@ const DUOLARGO_USERSCRIPT = true;
 
   // Durante lo scorrimento Safari fa "ondeggiare" gli elementi fissi: il pulsante sparisce e torna a pagina ferma.
   let scrollTimer = 0;
-  window.addEventListener("scroll", () => {
+  let touching = false;
+  const hideBtn = () => {
     if (btn.hidden) return;
     btn.classList.add("scrolling");
     clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => btn.classList.remove("scrolling"), 280);
-  }, { passive: true });
+    scrollTimer = setTimeout(() => { if (!touching) btn.classList.remove("scrolling"); }, 450);
+  };
+  window.addEventListener("scroll", hideBtn, { passive: true });
+  window.addEventListener("touchmove", (e) => { if (!e.composedPath().includes(host)) { touching = true; hideBtn(); } }, { passive: true });
+  window.addEventListener("touchend", () => { touching = false; hideBtn(); }, { passive: true });
 
   window.addEventListener("resize", onResize, { passive: true });
   window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
