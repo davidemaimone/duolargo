@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.6.6
+// @version      0.6.7
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -698,9 +698,19 @@ const DUOLARGO_USERSCRIPT = true;
     return lum(document.body) ?? lum(document.documentElement) ?? (matchMedia("(prefers-color-scheme: dark)").matches ? 0 : 1);
   }
 
+  // Il pulsante esiste solo alle due grandezze previste (pagina normale e allargata, entrambe a
+  // scala 1). Con lo zoom a due dita è nella pagina e si ingrandirebbe/sposterebbe con lei: si nasconde.
+  function isZoomed() {
+    const vv = window.visualViewport;
+    return !!vv && Math.abs(vv.scale - 1) > 0.02;
+  }
+
   function placeButton() {
-    const show = S.mode === "largo" && siteEnabled() && S.active;
+    const zoomed = isZoomed();
+    const show = S.mode === "largo" && siteEnabled() && S.active && !zoomed;
     btn.hidden = !show;
+    if (zoomed && !menu.hidden) closeMenu();
+    document.documentElement.dataset.duolargoZoom = zoomed ? "si" : "no";
     if (!show) return;
     btn.classList.toggle("off", S.narrow);
     const vv = window.visualViewport;
