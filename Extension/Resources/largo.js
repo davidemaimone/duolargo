@@ -143,20 +143,47 @@
 
   const style = document.createElement("style");
   style.id = "duolargo-style";
-  style.textContent = `
-  html.duolargo-on, html.duolargo-on body { overflow-x: clip !important; max-width: 100% !important; }
-  html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }
-`;
+  style.textContent = `html.duolargo-lock { touch-action: pan-y pinch-zoom !important; }`;
 
   function updateLock() {
     const vv = window.visualViewport;
     const zoomed = vv && vv.scale > 1.02;
-    document.documentElement.classList.toggle("duolargo-on", S.active);
     document.documentElement.classList.toggle("duolargo-lock", S.active && !zoomed);
     if (S.active && !zoomed && (scrollX > 0 || (vv && vv.offsetLeft > 0.5))) {
       window.scrollTo(0, scrollY);
     }
   }
+
+  function scrollsSideways(el) {
+    for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+      if (e.scrollWidth > e.clientWidth + 2) {
+        const ox = getComputedStyle(e).overflowX;
+        if (ox === "auto" || ox === "scroll") return true;
+      }
+    }
+    return false;
+  }
+
+  let gesture = null; // {x, y, horizontal}
+  document.addEventListener("touchstart", (e) => {
+    if (!S.active || e.touches.length !== 1) { gesture = null; return; }
+    const t = e.touches[0];
+    gesture = { x: t.clientX, y: t.clientY, horizontal: null, free: scrollsSideways(e.target) };
+  }, { passive: true, capture: true });
+  document.addEventListener("touchmove", (e) => {
+    if (!S.active || !gesture || e.touches.length !== 1) return;
+    const vv = window.visualViewport;
+    if (vv && vv.scale > 1.02) return; // con lo zoom il movimento laterale serve
+    const t = e.touches[0];
+    if (gesture.horizontal === null) {
+      const dx = Math.abs(t.clientX - gesture.x);
+      const dy = Math.abs(t.clientY - gesture.y);
+      if (dx + dy < 6) return;
+      gesture.horizontal = dx > dy;
+    }
+    if (gesture.horizontal && !gesture.free && e.cancelable) e.preventDefault();
+  }, { passive: false, capture: true });
+  document.addEventListener("touchend", () => { gesture = null; }, { passive: true, capture: true });
 
   // ---------- testo protetto ----------
 
