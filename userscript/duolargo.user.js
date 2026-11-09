@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuoLargo
 // @namespace    io.github.davidemaimone.duolargo
-// @version      0.4.3
+// @version      0.4.4
 // @description  Pagine a tutta larghezza sullo schermo esterno di iPhone Duo (versione di prova).
 // @match        *://*/*
 // @run-at       document-end
@@ -491,7 +491,10 @@ const DUOLARGO_USERSCRIPT = true;
   };
   window.addEventListener("scroll", hideBtn, { passive: true });
   window.addEventListener("touchmove", (e) => { if (!e.composedPath().includes(host)) { touching = true; hideBtn(); } }, { passive: true });
-  window.addEventListener("touchend", () => { touching = false; hideBtn(); }, { passive: true });
+  window.addEventListener("touchend", () => {
+    // si nasconde solo se il dito stava davvero trascinando la pagina, non dopo un tocco sul pulsante
+    if (touching) { touching = false; hideBtn(); }
+  }, { passive: true });
 
   window.addEventListener("resize", onResize, { passive: true });
   window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
