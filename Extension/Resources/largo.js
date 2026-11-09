@@ -59,7 +59,8 @@
     screenKey: "",
     originalViewport: undefined,
     padded: new Map(), // elemento -> padding-right inline originale
-    moved: new Map(), // elemento fisso -> {prop, value, priority}
+    moved: new Map(), // elemento posizionato -> {prop, value, priority}
+    clipped: new Map(), // contenitore -> clip-path inline originale
     reason: "",
     ignoreResizeUntil: 0,
   };
@@ -86,6 +87,8 @@
   }
 
   function measure() {
+    // Gancio per il simulatore (tools/sim): la pagina di test fornisce larghezza e colonna.
+    if (window.__DUOLARGO_TEST__) return { ok: true, ...window.__DUOLARGO_TEST__ };
     const meta = document.querySelector('meta[name="viewport"]');
     if (!meta) return { ok: false, reason: "il sito non è ottimizzato per smartphone" };
     if (/width\s*=\s*\d/i.test(meta.content) && !/width\s*=\s*device-width/i.test(meta.content) && S.originalViewport === undefined) {
@@ -207,90 +210,134 @@
     return null;
   }
 
-  function fixedAncestor(el) {
-    for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+  // Elemento piccolo posizionato (fisso, assoluto, sticky): si sposta lui invece di stringere il contenitore.
+  function positionedSmall(el) {
+    for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
       const p = getComputedStyle(e).position;
-      if (p === "fixed" || p === "sticky") return e;
+      if (p === "fixed" || p === "absolute" || p === "sticky") {
+        return e.getBoundingClientRect().width < S.W * 0.5 ? e : null;
+      }
     }
     return null;
+  }
+
+  function clipAncestor(el) {
+    for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+      const o = getComputedStyle(e).overflowX;
+      if (o === "hidden" || o === "clip") return e;
+    }
+    return null;
+  }
+
+  function sideScroller(el) {
+    for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+      const o = getComputedStyle(e).overflowX;
+      if ((o === "auto" || o === "scroll") && e.scrollWidth > e.clientWidth + 2) return e;
+    }
+    return null;
+  }
+
+  // Dove finisce davvero il contenuto: per il testo le lettere, per il resto il riquadro.
+  function contentRight(el, interactive) {
+    if (interactive) return el.getBoundingClientRect().right;
+    let right = -Infinity;
+    for (const n of el.childNodes) {
+      if (n.nodeType !== 3 || !n.nodeValue.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      for (const rr of range.getClientRects()) if (rr.width) right = Math.max(right, rr.right);
+    }
+    return right;
+  }
+
+  // Contenitore da accorciare: abbastanza largo da non schiacciare il testo e non ancora usato.
+  function pickContainer(el, interactive) {
+    let c = blockContainer(el, !interactive);
+    while (c && c !== document.body && (S.padded.has(c) || c.getBoundingClientRect().width < 180)) {
+      c = blockContainer(c, false);
+    }
+    return c;
   }
 
   function protectPass() {
     const limit = S.W - S.strip;
     const all = document.body ? document.body.getElementsByTagName("*") : [];
-    const wants = new Map(); // container -> extra padding
-    const shifts = new Map(); // piccolo elemento fisso -> spostamento
+    const pads = new Map(); // contenitore -> padding-right nuovo
+    const shifts = new Map(); // elemento posizionato -> spostamento
+    const clips = new Map(); // contenitore con overflow nascosto -> ritaglio
 
     for (const el of all) {
-      if (MEDIA.has(el.tagName) || el.closest("#duolargo-host, #duolargo-diag-host")) continue;
+      if (MEDIA.has(el.tagName) || el.id === "duolargo-host" || el.id === "duolargo-diag-host") continue;
       const interactive = el.matches(INTERACTIVE);
       if (!interactive && !hasDirectText(el)) continue;
       const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      const right = r.right + scrollX;
-      const left = r.left + scrollX;
-      if (right <= limit + 0.5 || left >= S.W) continue; // non tocca la colonna o è fuori schermo
+      if (r.width === 0 || r.height === 0 || r.left >= S.W) continue;
+      if (sideScroller(el)) continue; // caroselli: scorrono, passano sotto la colonna per forza
+      let right = contentRight(el, interactive);
+      const ca = clipAncestor(el);
+      if (ca) right = Math.min(right, ca.getBoundingClientRect().right);
+      if (right <= limit + 0.5) continue;
       const overlap = Math.ceil(right - limit);
 
-      const fixed = fixedAncestor(el);
-      if (fixed && fixed.getBoundingClientRect().width < S.W * 0.5) {
-        shifts.set(fixed, Math.max(shifts.get(fixed) ?? 0, overlap));
+      const ps = positionedSmall(el);
+      if (ps) {
+        if (!S.moved.has(ps)) shifts.set(ps, Math.max(shifts.get(ps) ?? 0, overlap));
         continue;
       }
-      const c = blockContainer(el, !interactive);
-      if (!c) continue;
-      wants.set(c, Math.max(wants.get(c) ?? 0, overlap));
+      // testo che esce da un contenitore già accorciato con overflow nascosto (es. ticker): si ritaglia
+      if (ca && S.padded.has(ca) && !S.clipped.has(ca)) {
+        clips.set(ca, Math.ceil(ca.getBoundingClientRect().right - limit));
+        continue;
+      }
+      const c = pickContainer(el, interactive);
+      if (!c || c === document.body || c === document.documentElement) continue;
+      if (pads.has(c)) continue;
+      const cs = getComputedStyle(c);
+      const pr = parseFloat(cs.paddingRight) || 0;
+      const br = parseFloat(cs.borderRightWidth) || 0;
+      const inner = c.getBoundingClientRect().right - br - pr; // bordo destro del contenuto
+      const need = Math.ceil(inner - limit);
+      if (need <= 0) continue;
+      pads.set(c, pr + need);
     }
 
-    // Ogni contenitore riceve il padding una volta sola, calcolato sul SUO bordo destro:
-    // prima veniva sommato a ogni passata e il testo diventava strettissimo.
-    const plan = [];
-    for (const c of wants.keys()) {
-      if (S.padded.has(c)) continue;
-      let skip = false;
-      for (let a = c.parentElement; a; a = a.parentElement) if (S.padded.has(a) || wants.has(a)) { skip = true; break; }
-      if (skip) continue;
-      const r = c.getBoundingClientRect();
-      const need = Math.ceil(r.right + scrollX - limit);
-      if (need <= 0 || r.width - need < 120) continue;
-      plan.push([c, need, parseFloat(getComputedStyle(c).paddingRight) || 0]);
-    }
-    for (const [c, need, pr] of plan) {
-      S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right")]);
+    // scritture tutte insieme, dopo le letture
+    for (const [c, value] of pads) {
+      S.padded.set(c, [c.style.getPropertyValue("padding-right"), c.style.getPropertyPriority("padding-right"),
+                       c.style.getPropertyValue("box-sizing"), c.style.getPropertyPriority("box-sizing")]);
       c.style.setProperty("box-sizing", "border-box", "important");
-      c.style.setProperty("padding-right", `${pr + need}px`, "important");
+      c.style.setProperty("padding-right", `${value}px`, "important");
     }
     for (const [f, extra] of shifts) {
-      if (S.moved.has(f)) continue;
       const cs = getComputedStyle(f);
-      if (!S.moved.has(f)) {
-        const prop = cs.right !== "auto" ? "right" : "left";
-        S.moved.set(f, { prop, value: f.style.getPropertyValue(prop), priority: f.style.getPropertyPriority(prop) });
-      }
-      const { prop } = S.moved.get(f);
+      const prop = cs.right !== "auto" ? "right" : "left";
+      S.moved.set(f, { prop, value: f.style.getPropertyValue(prop), priority: f.style.getPropertyPriority(prop) });
       const now = parseFloat(cs[prop]) || 0;
       f.style.setProperty(prop, `${prop === "right" ? now + extra : now - extra}px`, "important");
     }
-    return plan.length + shifts.size;
+    for (const [c, inset] of clips) {
+      S.clipped.set(c, [c.style.getPropertyValue("clip-path"), c.style.getPropertyPriority("clip-path")]);
+      c.style.setProperty("clip-path", `inset(0 ${inset}px 0 0)`, "important");
+    }
+    return pads.size + shifts.size + clips.size;
   }
 
   function protect() {
     if (!S.active || S.layout !== "protetto") return;
-    for (let i = 0; i < 4; i++) if (protectPass() === 0) break;
+    for (let i = 0; i < 6; i++) if (protectPass() === 0) break;
   }
 
   function unprotect() {
-    for (const [c, [v, p]] of S.padded) {
-      if (v) c.style.setProperty("padding-right", v, p);
-      else c.style.removeProperty("padding-right");
-      c.style.removeProperty("box-sizing");
+    const put = (el, prop, v, p) => (v ? el.style.setProperty(prop, v, p) : el.style.removeProperty(prop));
+    for (const [c, [v, p, bv, bp]] of S.padded) {
+      put(c, "padding-right", v, p);
+      put(c, "box-sizing", bv, bp);
     }
-    for (const [f, { prop, value, priority }] of S.moved) {
-      if (value) f.style.setProperty(prop, value, priority);
-      else f.style.removeProperty(prop);
-    }
+    for (const [f, { prop, value, priority }] of S.moved) put(f, prop, value, priority);
+    for (const [c, [v, p]] of S.clipped) put(c, "clip-path", v, p);
     S.padded.clear();
     S.moved.clear();
+    S.clipped.clear();
   }
 
   let protectTimer = 0;

@@ -4,3 +4,4 @@ Payload/
 *.ipa
 Config/*.plist
 .DS_Store
+tools/sim/out/

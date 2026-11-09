@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sito di notizie (stile iSpazio)</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:Helvetica,Arial,sans-serif;background:#eef1f6;color:#1d1d1f}
+header{position:sticky;top:0;z-index:10;background:#fff;display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #ddd}
+.logo{font-weight:800;font-size:21px;margin-right:auto;display:flex;align-items:center;gap:6px}
+.logo i{width:30px;height:30px;border-radius:8px;background:#2f7bf5;display:inline-block}
+.icon{width:36px;height:36px;border:1px solid #ddd;border-radius:10px;background:#f6f7f9;font-size:15px;padding:0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid #e5e5e5}
+.chips a{flex:none;padding:8px 12px;border:1px solid #ddd;border-radius:10px;color:#333;text-decoration:none;background:#f6f7f9}
+.ticker{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;white-space:nowrap;overflow:hidden}
+.ticker b{background:#b5581f;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;letter-spacing:.1em}
+.stories{display:flex;gap:14px;overflow-x:auto;padding:12px;background:#f7f8fb}
+.story{flex:none;width:60px;text-align:center;font-size:11px}
+.story i{display:block;width:60px;height:60px;border-radius:50%;border:3px solid #d0406a;background:linear-gradient(135deg,#334,#89a);margin-bottom:4px}
+main{padding:12px}
+.card{background:#fff;border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative}
+.card .img{height:190px;background:linear-gradient(135deg,#bcd2f5,#f3e7ff)}
+.card .bm{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:6px;background:#666;color:#fff;border:0}
+.card .body{padding:12px}
+.cat{color:#2f62c7;font-size:12px;font-weight:700}
+.card h2{color:#2f62c7;font-size:19px;margin:6px 0 10px}
+.meta{display:flex;justify-content:space-between;color:#777;font-size:13px}
+.row{display:flex;gap:10px;background:#fff;padding:10px;border-radius:12px;margin-bottom:10px}
+.row .th{flex:none;width:90px;height:70px;border-radius:8px;background:#cfe0ff}
+.row h3{font-size:15px;margin:0 0 4px}
+.row small{color:#777}
+.ad{text-align:center;color:#666;font-size:12px;letter-spacing:.1em;margin:16px 0}
+.ad .box{height:140px;background:#f1f1f1;margin:8px auto 0;max-width:300px}
+article{background:#fff;padding:14px;border-radius:12px}
+article h2{font-size:24px;margin:0 0 8px}
+article p{line-height:1.6;font-size:17px}
+.social{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.social a{background:#fff;border-radius:12px;padding:14px;text-decoration:none;color:#333}
+.cookie{position:fixed;left:0;right:0;bottom:0;background:#222;color:#fff;padding:12px;display:flex;gap:10px;align-items:center;z-index:20}
+.cookie p{margin:0;font-size:13px;flex:1}
+.cookie button{flex:none;padding:8px 14px;border:0;border-radius:8px;background:#2f7bf5;color:#fff}
+.totop{position:fixed;right:12px;bottom:90px;width:40px;height:40px;border-radius:50%;background:#2f7bf5;color:#fff;border:0;z-index:21}
+</style></head><body>
+<header><div class="logo"><i></i>ispazio</div>
+<button class="icon">⌕</button><button class="icon">♪</button><button class="icon">◉</button><button class="icon">⇥</button><button class="icon">☰</button></header>
+<nav class="chips"><a href="#">Offerte</a><a href="#">Sfondi</a><a href="#">Apple TV</a><a href="#">AppyDeals</a><a href="#">Recensioni</a><a href="#">Guide</a></nav>
+<div class="ticker"><b>BREAKING</b><span>Abbonati a iSpazio Plus, ottieni funzionalità esclusive e supportaci con l'abbonamento annuale</span></div>
+<div class="stories"><div class="story"><i></i>Download</div><div class="story"><i></i>Apple Intel…</div><div class="story"><i></i>Accessori</div><div class="story"><i></i>Music</div><div class="story"><i></i>Mac</div><div class="story"><i></i>App</div></div>
+<main>
+<div class="card"><div class="img"></div><button class="bm">★</button>
+<div class="body"><div class="cat">IPAD MINI</div><h2><a href="#" style="color:inherit;text-decoration:none">Nuovo iPad mini A20 Pro, disponibile all'acquisto anche su Amazon (anche a rate a tasso zero)</a></h2>
+<div class="meta"><span>29 Ott 2026</span><a href="#">💬 2</a></div></div></div>
+<div class="row"><div class="th"></div><div><h3><a href="#" style="color:inherit;text-decoration:none">Vi presentiamo Largo, la nostra app per migliorare Safari su iPhone Duo</a></h3><small>3 Nov 2026 · 52 commenti</small></div></div>
+<div class="row"><div class="th"></div><div><h3><a href="#" style="color:inherit;text-decoration:none">iOS 27.2 disponibile: tutte le novità per iPhone Duo e iPhone 18</a></h3><small>5 Nov 2026 · 18 commenti</small></div></div>
+<div class="ad">PUBBLICITÀ<div class="box"></div></div>
+<article><h2>Largo 1.1 funziona anche con “Sposta bordo sinistro”</h2>
+<p>Chi usa una custodia che copre il bordo sinistro dello schermo esterno di iPhone Duo può attivare l'opzione Sposta bordo sinistro nelle Impostazioni, alla voce Schermo e luminosità. Con questa opzione accesa iOS aggiunge a sinistra una sottile striscia nera.</p>
+<p>Nessuna funzione di iOS o del web dice a un'estensione se questa opzione è attiva, e Largo non poteva saperlo. <a href="#">Leggi la guida completa</a> per configurarlo bene.</p></article>
+<div class="social"><a href="#">f 172K Facebook</a><a href="#">X 73K Twitter</a><a href="#">◎ 82K Instagram</a><a href="#">▶ 45K YouTube</a></div>
+</main>
+<button class="totop">↑</button>
+<div class="cookie"><p>Usiamo i cookie per migliorare la tua esperienza sul sito.</p><button>Accetta</button></div>
+</body></html>
